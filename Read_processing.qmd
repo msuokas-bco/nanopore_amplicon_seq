@@ -1,0 +1,29 @@
+---
+title: "Untitled"
+format: pdf
+pdf-engine: lualatex
+editor: visual
+mainfont: Calibri
+monofont: PT Mono
+always_allow_html: yes
+header-includes:
+   \usepackage[dvipsnames]{xcolor}
+   \definecolor{darkblue}{rgb}{0.0, 0.0, 0.55}
+   \definecolor{ivory}{rgb}{1.0, 1.0, 0.94}
+---
+
+### Preprocessing reads
+
+##### Demultiplexing reads
+
+Dorado doesn't support demultiplexing of dual indexes on 5' and 3' ends. Additionally, ligated library reads can be either orientation. Most straightforward approach is to solve this, is to utilise flanking adapter sequences and cutadapt.
+
+Extracting forward reads to fastq file can be performed with following command
+
+*cutadapt -g t2f...rc(t2r) -O 13 —discard-untrimmed -e 0 -m 1300 -M 1650 -o forward_out.fastq.qz raw_reads.fastq.gz*
+
+Extracting reverse reads
+
+*cutadapt -g t2r...rc(t2f) -O 13 —discard-untrimmed -e 0 -m 1300 -M 1650 -o reverse_out.fastq.gz read_file.fastq.gz*
+
+**Note!** e=0, minimum (m) and maximum size limits reduce chance of misaligned reads
