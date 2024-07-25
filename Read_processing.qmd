@@ -14,7 +14,7 @@ header-includes:
 
 ### Preprocessing reads
 
-##### Demultiplexing reads
+##### Preparing reads
 
 Dorado doesn't support demultiplexing of dual indexes on 5' and 3' ends. Additionally, ligated library reads can be either orientation. Most straightforward approach is to solve this, is to utilise flanking adapter sequences and cutadapt.
 
@@ -24,6 +24,14 @@ Extracting forward reads to fastq file can be performed with following command
 
 Extracting reverse reads
 
-*cutadapt -g t2r...rc(t2f) -O 13 —discard-untrimmed -e 0 -m 1300 -M 1650 -o reverse_out.fastq.gz read_file.fastq.gz*
+*cutadapt -g t2r...rc(t2f) -O 13 —discard-untrimmed -e 0 -m 1300 -M 1650 -o reverse_out.fastq.gz raw_reads.fastq.gz*
 
 **Note!** e=0, minimum (m) and maximum size limits reduce chance of misaligned reads
+
+Next step is to reverse complement reverse read file and join all reads to single file. This will make life easier later in the data analysis workflow.
+
+*seqkit seq -rp --seq-type DNA reverse_out.fastq.gz \| gzip \>reverse_comp.fastq.gz*
+
+Next step is to merge two files together
+
+*cat forward_out.fastq.gz reverse_comp.fastq.gz \>nanopore_reads.fastq.gz*
