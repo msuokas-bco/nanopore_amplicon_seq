@@ -12,6 +12,16 @@ header-includes:
    \definecolor{ivory}{rgb}{1.0, 1.0, 0.94}
 ---
 
+```{r, include=FALSE}
+# This will allow to use different font sizes inside code chunks
+# Won't be included in the report
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+```
+
 ### Preprocessing reads
 
 ##### Preparing reads
@@ -46,4 +56,86 @@ Use cutadapt to demux fastq file. In example output files are written to demuxed
 
 ##### Trimming PCR amplification primers
 
-You can use cutadapt and bash scripts to trim forward and revers PCR primers from demultiplexed sequence files
+You can use cutadapt and bash scripts to trim forward and revers PCR primers from demultiplexed sequence files.
+
+### Importing set1
+
+Loading libraries
+
+```{r, warning=FALSE, message=FALSE}
+library(dada2);packageVersion("dada2")
+library(knitr);packageVersion("knitr")
+library(Biostrings);packageVersion("Biostrings")
+library(DECIPHER);packageVersion("DECIPHER")
+library(phyloseq);packageVersion("phyloseq")
+library(tidyverse);packageVersion("tidyverse")
+#library(ips);packageVersion("ips")
+#library(ape);packageVersion("ape")
+library(kableExtra);packageVersion("kableExtra")
+#library(patchwork);packageVersion("patchwork")
+#library(mia);parckageVersion("mia")
+```
+
+```{r, warning=FALSE,message=FALSE, size="small"}
+# Path variables
+path <- "data/processed/set1"
+training <- "~/feature_classifiers/SILVA_SSU_r138_2019.RData"
+#meta_file <- "~/pr_eng/hanna/metadata.tsv"
+#exportloc <- "~/pr_eng/hanna/hanna_results/"
+# Variables: truncation length, phix (Illumina)
+truncation <- 1400
+# Set name of first column in your metadata file
+#meta_1stcol <- "sampleid"
+#Creates results directory
+#dir.create(exportloc)
+```
+
+```{r, warning=FALSE, message=FALSE, size="small"}
+#List files inside directory
+list.files(path)
+# Forward fastq filenames have format: SAMPLENAME_R1_001.fastq
+fnFs <- sort(list.files(path, pattern="_trimmed_all.fastq.gz", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+```
+
+\newpage
+
+Plotting sequence quality profile for sample pairs
+
+```{r, warning=FALSE, message=FALSE, size="small"}
+# Base quality plot
+prI <- plotQualityProfile(fnFs[1:2])
+prI
+```
+
+\newpage
+
+```{r, warning=FALSE, message=FALSE, size="small"}
+# Base quality plot
+prII <- plotQualityProfile(fnFs[3:4])
+prII
+```
+
+\newpage
+
+```{r, warning=FALSE, message=FALSE, size="small"}
+# Base quality plot
+prIII <- plotQualityProfile(fnFs[5:6])
+prIII
+```
+
+\newpage
+
+Filtering reads (maxEE ≈ 1 error/200 bp sequence)
+
+```{r, warning=FALSE, message=FALSE, size="small"}
+# Filtered files are placed in filtered subdirectory
+filtFs <- file.path(path, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+# For single end reads without phix control
+names(filtFs) <- sample.names
+out <- filterAndTrim(fnFs, filtFs, truncLen=truncation,
+                     maxN=0, maxEE=7 , truncQ=2,
+                     compress=TRUE, multithread=TRUE,
+                     rm.phix=FALSE)
+```
