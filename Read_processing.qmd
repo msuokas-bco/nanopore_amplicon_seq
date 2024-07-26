@@ -20,11 +20,11 @@ Dorado doesn't support demultiplexing of dual indexes on 5' and 3' ends. Additio
 
 Extracting forward reads to fastq file can be performed with following command
 
-*cutadapt -g t2f...rc(t2r) -O 13 —discard-untrimmed -e 0 -m 1300 -M 1650 -o forward_out.fastq.qz raw_reads.fastq.gz*
+*cutadapt -g t2f...rc(t2r) -O 13 --trimmed-only -m 1300 -M 1650 -o forward_out.fastq.gz raw_reads.fastq.gz*
 
 Extracting reverse reads
 
-*cutadapt -g t2r...rc(t2f) -O 13 —discard-untrimmed -e 0 -m 1300 -M 1650 -o reverse_out.fastq.gz raw_reads.fastq.gz*
+*cutadapt -g t2r...rc(t2f) -O 13 -m 1300 -M 1650 --trimmed-only -o reverse_out.fastq.gz raw_reads.fastq.gz*
 
 **Note!** e=0, minimum (m) and maximum size limits reduce chance of misaligned reads
 
@@ -35,3 +35,15 @@ Next step is to reverse complement reverse read file and join all reads to singl
 Next step is to merge two files together
 
 *cat forward_out.fastq.gz reverse_comp.fastq.gz \>nanopore_reads.fastq.gz*
+
+##### Demultiplexing reads
+
+Prepare list of barcodes as a fasta file
+
+Use cutadapt to demux fastq file. In example output files are written to demuxed subdirectory
+
+*cutadapt -e 0 -O 12 -g file:barcodes.fasta -o "demuxed/{name}.fastq.gz" input.fastq.gz*
+
+##### Trimming PCR amplification primers
+
+You can use cutadapt and bash scripts to trim forward and revers PCR primers from demultiplexed sequence files
