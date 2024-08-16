@@ -1,5 +1,6 @@
 ---
-title: "Processing nanopore reads with dada2"
+title: "Processing nanopore reads"
+author: "Marko Suokas"
 format: pdf
 pdf-engine: lualatex
 editor: visual
@@ -22,45 +23,39 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 })
 ```
 
-### Preprocessing reads
+#### Preprocess reads
 
-##### Preparing reads
-
-Dorado doesn't support demultiplexing of dual indexes on 5' and 3' ends. Additionally, ligated library reads can be either orientation. Most straightforward approach to solve this, is utilising flanking adapter sequences and cutadapt. Another alternative is to demultiplex index pairs in forward and reverse orientation, then build scripts to reverse complement and merge reverse reads.
+Dorado doesn't support demultiplexing of dual indexes at 5' and 3' ends. Additionally, library reads are able to ligate in either orientation. Most straightforward approach to demultiplex reads, is to utilise cutadapt. You can demultiplex index pairs using linked adapters approach in forward and reverse orientation, then process with scripts to reverse complement reverse read files and merge each of them with forward reads.
 
 Extracting forward reads to fastq file can be performed with following command
 
-*cutadapt -g t2f...rc(t2r) -O 13 --trimmed-only -m 1300 -M 1650 -o forward_out.fastq.gz raw_reads.fastq.gz*
+*cutadapt -e 0 -O 12 -g file:\~/scripts/barcodes.fasta --trimmed-only -m 1200  -o "fdemuxed/{name}.fastq.gz" reads.fastq.gz*
 
-Extracting reverse reads
+Command will extract barcodes defined in barcodes.fasta file and output matches into individual files in fdemuxed subdirectory. Minimum length is set in example to 1200 bp.
 
-*cutadapt -g t2r...rc(t2f) -O 13 -m 1300 -M 1650 --trimmed-only -o reverse_out.fastq.gz raw_reads.fastq.gz*
+Extracting reverse reads using reverse complemented barcodes.fasta file
 
-**Note!** O, e, m and M parameters can be used to reduce chances of misaligned matches
+*cutadapt -e 0 -O 12 -g file:/users/suokasma/scripts/rev_barcodes.fasta --trimmed-only -m 1200  -o "rdemuxed/{name}.fastq.gz" reads.fastq.gz*
 
-Next step is to reverse complement reverse read file and join all reads to single file. This will make life easier later in the workflow.
+Reads are demultiplexed into separate directory
 
-*seqkit seq -rp --seq-type DNA reverse_out.fastq.gz \| gzip \>reverse_comp.fastq.gz*
+**Tip!** O, e, m and M parameters can be used to reduce chances of misaligned matches
 
-Final step is to merge two files together
+Next we use bash script that will process each reverse read file and reverse complement them using basic command
 
-*cat forward_out.fastq.gz reverse_comp.fastq.gz \>nanopore_reads.fastq.gz*
+*seqkit seq -rp --seq-type -o reverse_comp.fastq.gz DNA reverse_out.fastq.gz*
 
-##### Demultiplexing reads
+Final step is merging. You can use also for this simple bash script that merge files with same base name from two separate directories using basic command
 
-Prepare list of barcodes as a fasta file
-
-Use cutadapt to demux fastq file. In example output files are written to demuxed subdirectory
-
-*cutadapt -e 0 -O 12 -g file:barcodes.fasta -o "demuxed/{name}.fastq.gz" input.fastq.gz*
+*zcat forward_out.fastq.gz reverse_comp.fastq.gz \> merged_reads.fastq.gz*
 
 ##### Trimming PCR amplification primers
 
-You can use cutadapt and bash scripts to trim forward and revers PCR primers from demultiplexed sequence files.
+Finally, you can use cutadapt and bash scripts to trim forward and reverse PCR primers from sequence files.
 
-### Importing set1
+#### Import set1 to R
 
-Loading libraries
+Load libraries
 
 ```{r, warning=FALSE, message=FALSE, size="tiny"}
 library(dada2);packageVersion("dada2")
@@ -71,7 +66,12 @@ library(phyloseq);packageVersion("phyloseq")
 library(tidyverse);packageVersion("tidyverse")
 library(kableExtra);packageVersion("kableExtra")
 library(mia);packageVersion("mia")
+library(qiime2R);packageVersion("qiime2R")
 ```
+
+\newpage
+
+Set variables
 
 ```{r, warning=FALSE,message=FALSE, size="tiny"}
 # Path variables
@@ -87,7 +87,9 @@ dir.create(exportloc)
 metadata <- data.frame(read_tsv(meta_file))
 ```
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+For the project, we take advantage of computing power of CSC puhti server and import already executed data objects from there. R code is unaltered and can can be executed by turning eval to TRUE.
+
+```{r, warning = FALSE, message = FALSE, size = "tiny"}
 #List files inside directory
 list.files(path)
 # Forward fastq filenames have format: SAMPLENAME_R1_001.fastq
@@ -98,39 +100,26 @@ sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
 
 \newpage
 
-Plotting sequence quality profile for sample pairs
+Plot sequence quality profile for samples
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning = FALSE, message = FALSE, size = "tiny", eval = FALSE}
 # Base quality plot
-prI <- plotQualityProfile(fnFs[1:2])
-prI
+prsetI <- plotQualityProfile(fnFs[1:6])
+prsetI
+```
+
+```{r, size="tiny", fig.dim = c(6.5,6.5)}
+prsetI <- readRDS("rds/set1_rds/prsetI.rds")
+prsetI
 ```
 
 \newpage
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-# Base quality plot
-prII <- plotQualityProfile(fnFs[3:4])
-prII
-```
+#### Filter sequence data
 
-\newpage
+Filtering reads (maxEE ≈ 1 error/200 bp sequence is good starting point for this amplicons)
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-# Base quality plot
-prIII <- plotQualityProfile(fnFs[5:6])
-prIII
-```
-
-\newpage
-
-### Denoising
-
-##### Filter sequence data
-
-Filtering reads (maxEE ≈ 1 error/200 bp sequence is good starting point for nanopore)
-
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
 # Filtered files are placed in filtered subdirectory
 filtFs <- file.path(path, "filtered", paste0(sample.names,
                                              "_F_filt.fastq.gz"))
@@ -142,39 +131,43 @@ out <- filterAndTrim(fnFs, filtFs, truncLen=truncation,
                      rm.phix = FALSE)
 ```
 
-##### Dereplicating sequences
-
-Step condenses identical sequences saving computational time
-
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-derepFs <- derepFastq(filtFs, verbose = TRUE)
+```{r, size="tiny"}
+out <- readRDS("rds/set1_rds/out.rds")
 ```
 
-##### Learning error rates
+#### Learn error rates
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
 # Forward read error rate
-errF <- learnErrors(derepFs, multithread = TRUE)
+errF <- learnErrors(filtFs, multithread = TRUE)
+```
+
+```{r, size="tiny"}
+errF <- readRDS("rds/set1_rds/errF.rds")
 ```
 
 \newpage
 
-Plotting error rate
+Plot error rates
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning=FALSE, message=FALSE, size="tiny", fig.dim=c(6.5,6)}
 # Plotting error rate profile for forward reads
 plotErrors(errF, nominalQ = TRUE)
 ```
 
 \newpage
 
-##### Denoising
+#### Denoise
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
 dadaFs <- dada(derepFs, err = errF, multithread = TRUE)
 ```
 
-##### Building asv table
+```{r, size="tiny"}
+dadaFs <- readRDS("rds/set1_rds/dadaFs.rds")
+```
+
+#### Build asv table
 
 ```{r, warning=FALSE, message=FALSE, size="tiny"}
 seqtab <- makeSequenceTable(dadaFs)
@@ -182,7 +175,7 @@ seqtab <- makeSequenceTable(dadaFs)
 dim(seqtab)
 ```
 
-##### Chimera removal
+#### Chimera removal
 
 ```{r, warning=FALSE, message=FALSE, size="tiny"}
 seqtab.nochim <- removeBimeraDenovo(seqtab, method = "consensus",
@@ -192,7 +185,7 @@ dim(seqtab.nochim)
 
 \newpage
 
-##### Summary
+#### Summary
 
 ```{r, warning=FALSE, message=FALSE, size="small"}
 getN <- function(x) sum(getUniques(x))
@@ -209,11 +202,11 @@ kable(track, caption="Summary table")  %>%
 
 \newpage
 
-### Taxonomy assignment
+#### Taxonomy assignment
 
 IdTaxa from DECIPHER package
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
 #Create a DNAStringSet from the ASV sequences
 repseq <- DNAStringSet(getSequences(seqtab.nochim))
 # CHANGE TO THE PATH OF YOUR TRAINING SET
@@ -233,7 +226,11 @@ taxid <-t(sapply(ids, function(x) {
 colnames(taxid) <- ranks; rownames(taxid) <- getSequences(seqtab.nochim)
 ```
 
-### Create phyloseq object
+```{r, size="tiny"}
+taxid <- readRDS("rds/set1_rds/taxid.rds")
+```
+
+#### Create phyloseq object
 
 ```{r, warning=FALSE, message=FALSE, size="tiny"}
 pseq <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows = FALSE),
@@ -257,15 +254,13 @@ colnames(tax_table(pseq)) <- c("Kingdom", "Phylum", "Class",
   "Order", "Family", "Genus", "Species")
 ```
 
-##### Remove non-bacterial taxa
+#### Remove non-bacterial taxa
 
 ```{r, warning=FALSE, message=FALSE, size="tiny"}
-pseq <- subset_taxa(pseq, Kingdom != is.na(Kingdom))
+#pseq <- subset_taxa(pseq, Kingdom == c("Bacteria", "Archaea"), na.rm = TRUE)
 ```
 
-\newpage
-
-### Write results to files
+#### Write results to files
 
 Abundance table is transponed and written as tsv file
 
@@ -297,3 +292,105 @@ pseq %>% refseq() %>% writeXStringSet(paste0(exportloc,"repseq.fasta"),
                                       append = FALSE, compress = FALSE,
                                       format = "fasta")
 ```
+
+\newpage
+
+#### Vsearch\@97%
+
+Data has been processed in qiime, except feature classification
+
+```{r, warning = FALSE, message = FALSE, size = "tiny"}
+#read qiime2 table
+vs97 <- readQZA("data/vsearch/97/filtered-table.qza")
+#reorder samples
+vs97 <- vs97[, order(colnames(vs97))]
+#read taxonomy
+otu_taxonomy <- readRDS("data/vsearch/97/taxid.rds")
+pseq_vsearch97 <- phyloseq(otu_table(vs97, taxa_are_rows = TRUE),
+                 tax_table(otu_taxonomy))
+#change names
+taxa_names(pseq_vsearch97) <- paste0("ASV", seq(ntaxa(pseq_vsearch97)))
+#capitalise taxonomic ranks
+colnames(tax_table(pseq_vsearch97)) <- c("Kingdom", "Phylum", "Class", 
+  "Order", "Family", "Genus", "Species")
+#create DNA object and store sequences 
+seqs <- readDNAStringSet("data/vsearch/97/dna-sequences.fasta")
+names(seqs) <- taxa_names(pseq_vsearch97)
+pseq_vsearch97 <- merge_phyloseq(pseq_vsearch97, seqs)
+#prune non-bacterial taxa
+#pseq_vsearch97 <- subset_taxa(pseq_vsearch97, Kingdom == c("Bacteria", "Archaea"))
+```
+
+Write vsearch97 after data wrangling
+
+```{r, warning = FALSE, message = FALSE, size = "tiny"}
+#create_directory
+results <- "results_vsearch97/"
+dir.create(results)
+#variant_table
+ASV_names <- taxa_names(pseq_vsearch97)
+ASV_counts <- otu_table(pseq_vsearch97)
+ASVdf <- (data.frame(ASV_names,ASV_counts))
+write_tsv(ASVdf, paste0(results,"asvs_set1.tsv"))
+#taxonomy
+ASV_names <- taxa_names(pseq_vsearch97)
+taxonomy <- (data.frame(ASV_names, tax_table(pseq_vsearch97)))
+write_tsv(taxonomy,paste0(results,"taxonomy_set1.tsv"))
+#sequences
+refseq(pseq_vsearch97) %>% writeXStringSet(paste0(results,"repseq_set1.fasta"),
+                                      append = FALSE, compress = FALSE,
+                                      format = "fasta")
+```
+
+\newpage
+
+#### Vsearch\@99%
+
+```{r, warning = FALSE, message = FALSE, size = "tiny"}
+#read qiime2 table
+vs99 <- readQZA("data/vsearch/99/filtered-table.qza")
+#reorder samples
+vs99 <- vs99[, order(colnames(vs99))]
+#read taxonomy
+otu_taxonomy <- readRDS("data/vsearch/99/taxid.rds")
+pseq_vsearch99 <- phyloseq(otu_table(vs99, taxa_are_rows = TRUE),
+                 tax_table(otu_taxonomy))
+#change names
+taxa_names(pseq_vsearch99) <- paste0("ASV", seq(ntaxa(pseq_vsearch99)))
+#capitalise taxonomic ranks
+colnames(tax_table(pseq_vsearch99)) <- c("Kingdom", "Phylum", "Class", 
+  "Order", "Family", "Genus", "Species")
+#create DNA object and store sequences 
+seqs <- readDNAStringSet("data/vsearch/99/dna-sequences.fasta")
+names(seqs) <- taxa_names(pseq_vsearch99)
+pseq_vsearch99 <- merge_phyloseq(pseq_vsearch99, seqs)
+#prune non-bacterial taxa
+#pseq_vsearch99 <- subset_taxa(pseq_vsearch99, Kingdom == c("Bacteria", "Archaea"))
+```
+
+Write vsearch99 files after data wrangling
+
+```{r, warning = FALSE, message = FALSE, size = "tiny"}
+#create_directory
+results <- "results_vsearch99/"
+dir.create(results)
+#variant_table
+ASV_names <- taxa_names(pseq_vsearch99)
+ASV_counts <- otu_table(pseq_vsearch99)
+ASVdf <- (data.frame(ASV_names,ASV_counts))
+write_tsv(ASVdf, paste0(results,"asvs_set1.tsv"))
+#taxonomy
+ASV_names <- taxa_names(pseq_vsearch99)
+taxonomy <- (data.frame(ASV_names, tax_table(pseq_vsearch99)))
+write_tsv(taxonomy,paste0(results,"taxonomy_set1.tsv"))
+#sequences
+refseq(pseq_vsearch99) %>% writeXStringSet(paste0(results,"repseq_set1.fasta"),
+                                      append = FALSE, compress = FALSE,
+                                      format = "fasta")
+```
+
+#### Observations
+
+Low bacterial diversity in the samples is most likely explanation why denoising seemingly produces good results for long 16S rRNA. Error rate plot looks in this case flawless. However, it is notable that all samples contain over 150 k unique reads.
+
+On the other hand, vsearch produced very high number of variants, over 900 and 9000, respectively.
