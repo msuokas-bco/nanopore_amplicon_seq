@@ -2,9 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
-data
-rds
-results_set1
-results_set2
-results_vsearch97
-results_vsearch99
+data/
+rds/
+results_set1/
+results_set2/
+results_vsearch97/
+results_vsearch99/
