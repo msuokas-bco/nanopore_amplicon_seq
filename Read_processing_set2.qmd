@@ -1,7 +1,7 @@
 ---
 title: "Processing nanopore reads"
 author: "Marko Suokas"
-format: pdf
+format: docx
 pdf-engine: lualatex
 editor: visual
 mainfont: Aptos
@@ -383,6 +383,6 @@ refseq(pseq_vsearch99) %>% writeXStringSet(paste0(results,"repseq_set2.fasta"),
 
 #### Observations
 
-With larger number of variant and 1,4 kbp sequence length, error rate profiles start clearly to deviate from expected. Even though, variant numbers seem realistic, denoising might not be best choice.
+With larger number of variants and 1,4 kbp sequence length, error rate profiles start slightly to deviate from expected. It doesn't seem more than we usually see with short-read sequencers. Even though, variant numbers seem realistic, it's unclear if denoising is best choice for data.
 
-From same data, vsearch produced \>2500 and \>18000 variants, respectively. Note that in this set, sequences were truncated to 1400 prior dereplication and clustering.
+From same samples, vsearch produced \>2500 and \>18000 variants, respectively. Note that in this set, sequences were truncated to 1400 prior dereplication and clustering.

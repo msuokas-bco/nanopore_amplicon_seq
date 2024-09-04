@@ -1,7 +1,7 @@
 ---
 title: "Microbial community analysis in R"
 author: "Marko Suokas"
-format: docx
+format: pdf
 editor: visual
 mainfont: Aptos
 monofont: PT Mono
@@ -149,7 +149,7 @@ kable(variants, caption = "Number of variants" )  %>%
   row_spec(0, background = "teal", color = "ivory")
 ```
 
-Species level taxonomic classification is not very reliable. Thus, we will agglomerate all objects to genus level-
+Agglomeration of all objects to genus level.
 
 ```{r agglomerate, warning = FALSE, message = FALSE, size = "tiny"}
 #agglomeration to genus level
@@ -165,7 +165,7 @@ nrow(VS97)
 nrow(VS99)
 ```
 
-Following code will transform counts to relative abundances
+Transforming counts to relative abundances
 
 ```{r rel_abundance, message = FALSE, warning = FALSE, size = "tiny"}
 #relabundance
@@ -179,7 +179,7 @@ VS99 <- transformAssay(VS99, assay.type = "counts",
 
 \newpage
 
-We will list 10 most abundant variants
+We will list 10 most abundant variants for each method
 
 ```{r top10, warning = FALSE, message = FALSE, size = "tiny"}
 #get top10 features
@@ -241,7 +241,7 @@ kable(df_VS99, digits=2, caption = "Top10 microbes using Vsearch 99") %>%
 
 \newpage
 
-For barplot, we need to melt assay data
+For barplot, we melt assay data
 
 ```{r melt_data, warning = FALSE, message = FALSE, size = "tiny"}
 #transform data
@@ -352,8 +352,8 @@ plot_pcoa
 
 #### Observations
 
-Overall results of the samples are highly similar. However, it should be noted that diversity in analysed samples is lower than in many environmental or clinical samples.
+Overall results are highly similar. However, it should be noted that diversity in analysed samples is lower than in many environmental or clinical samples.
 
-Clustering methods produce high number of variants compared to denoising, but findings show that core microbiome remains unchanged. Ten most common variants are almost identical. Surprisingly, denoising has slightly higher shannon index value in 4 out of 6 samples. In bray-curtis dissimilarity analysis, only one out of six samples is somewhat different when using denoising.
+Clustering methods produce high number of variants compared to denoising, but core microbes remain unchanged. Ten most common variants are almost identical. Surprisingly, denoising has slightly higher shannon index value in 4 out of 6 samples. In bray-curtis dissimilarity analysis, only one out of six samples is somewhat different when using denoising.
 
-Currently, it is probably safest to to use vsearch clustering for long amplicons until we have more data on how denoiser performs on larger data sets. Recommended identity level is 99 %.
+Currently, it might be safest to to use vsearch clustering for long amplicons until we have more data on how denoiser performs on larger data sets. Recommended identity level is 99 %.

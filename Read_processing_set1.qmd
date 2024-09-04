@@ -1,7 +1,7 @@
 ---
 title: "Processing nanopore reads"
 author: "Marko Suokas"
-format: pdf
+format: docx
 pdf-engine: lualatex
 editor: visual
 mainfont: Aptos
@@ -117,7 +117,7 @@ prsetI
 
 #### Filter sequence data
 
-Filtering reads (maxEE ≈ 1 error/200 bp sequence is good starting point for this amplicons)
+Filtering reads (maxEE ≈ 1 error/200 bp sequence is good starting point for this amplicon)
 
 ```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
 # Filtered files are placed in filtered subdirectory
@@ -254,12 +254,6 @@ colnames(tax_table(pseq)) <- c("Kingdom", "Phylum", "Class",
   "Order", "Family", "Genus", "Species")
 ```
 
-#### Remove non-bacterial taxa
-
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-#pseq <- subset_taxa(pseq, Kingdom == c("Bacteria", "Archaea"), na.rm = TRUE)
-```
-
 #### Write results to files
 
 Abundance table is transponed and written as tsv file
@@ -317,8 +311,6 @@ colnames(tax_table(pseq_vsearch97)) <- c("Kingdom", "Phylum", "Class",
 seqs <- readDNAStringSet("data/vsearch/97/dna-sequences.fasta")
 names(seqs) <- taxa_names(pseq_vsearch97)
 pseq_vsearch97 <- merge_phyloseq(pseq_vsearch97, seqs)
-#prune non-bacterial taxa
-#pseq_vsearch97 <- subset_taxa(pseq_vsearch97, Kingdom == c("Bacteria", "Archaea"))
 ```
 
 Write vsearch97 after data wrangling
@@ -364,8 +356,6 @@ colnames(tax_table(pseq_vsearch99)) <- c("Kingdom", "Phylum", "Class",
 seqs <- readDNAStringSet("data/vsearch/99/dna-sequences.fasta")
 names(seqs) <- taxa_names(pseq_vsearch99)
 pseq_vsearch99 <- merge_phyloseq(pseq_vsearch99, seqs)
-#prune non-bacterial taxa
-#pseq_vsearch99 <- subset_taxa(pseq_vsearch99, Kingdom == c("Bacteria", "Archaea"))
 ```
 
 Write vsearch99 files after data wrangling
@@ -391,6 +381,6 @@ refseq(pseq_vsearch99) %>% writeXStringSet(paste0(results,"repseq_set1.fasta"),
 
 #### Observations
 
-Low bacterial diversity in the samples is most likely explanation why denoising seemingly produces good results for long 16S rRNA. Error rate plot looks in this case flawless. However, it is notable that all samples contain over 150 k unique reads.
+Low bacterial diversity in the samples is most likely explanation why denoising produces good results for long 16S rRNA. Error rate plot looks in this case flawless. However, it is notable that all samples contain over 150 k unique reads.
 
-On the other hand, vsearch produced very high number of variants, over 900 and 9000, respectively.
+Vsearch produced very high number of variants, over 900 and 9000, respectively.

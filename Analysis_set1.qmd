@@ -1,7 +1,7 @@
 ---
 title: "Microbial community analysis in R"
 author: "Marko Suokas"
-format: docx
+format: pdf
 pdf-engine: lualatex
 editor: visual
 mainfont: Aptos
@@ -148,7 +148,7 @@ kable(variants, caption = "Number of variants" )  %>%
   row_spec(0, background = "teal", color = "ivory")
 ```
 
-As species level taxonomic information is fairly unreliable, we agglomerate objects to genus level
+Agglomerate objects to genus level
 
 ```{r, warning = FALSE, message = FALSE, size = "tiny"}
 #agglomeration to genus level
@@ -164,7 +164,7 @@ nrow(VS97)
 nrow(VS99)
 ```
 
-Clear difference between methods remains, but in much smaller extent
+Difference between methods remains, but in much smaller extent
 
 Next, we convert counts to relative abundance values
 
@@ -180,7 +180,7 @@ VS99 <- transformAssay(VS99, assay.type = "counts",
 
 \newpage
 
-Then, we pick five most abundant features
+Then, pick five most abundant features
 
 ```{r, warning = FALSE, message = FALSE, size = "tiny"}
 #get top5 features
@@ -236,7 +236,7 @@ kable(df_VS99, digits=2) %>%
 
 \newpage
 
-For stacked barplots, we melt assay data
+For stacked barplots, assay data is melted
 
 ```{r, warning = FALSE, message = FALSE, size = "tiny"}
 #transform data to ggplots
@@ -278,6 +278,6 @@ dada_plot+vs97_plot+vs99_plot
 
 #### Observations
 
-In this sample set, where we evidently have pure microbial cultures, each method gave exactly same result. Low diversity might explain why dada2 error profile looks clean. In more complex communities, it's possible that denoising doesn't function as well. We already have previous evidence that dada2 can function accurately in mock communities consisting few microbes.
+In sample set, we evidently have pure microbial cultures, each method gave exactly same result. Low diversity might explain why dada2 error profile looks very clean.
 
-On the other hand, clustering methods produce lot more low abundance noise, but it doesn't show in the end results (with two digits accuracy). There are two discrepancies in 10 most commond features between denoising and clustering. Dada picked up fonticella and clustering methods acidithiobacillus.
+Clustering of reads produce lot more low abundant noise, but it doesn't show in the end results (with two digits accuracy). There are two discrepancies in 10 most commond features between denoising and clustering. Dada picked up fonticella and clustering methods acidithiobacillus.
