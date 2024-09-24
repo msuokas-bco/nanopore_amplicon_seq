@@ -1,20 +1,13 @@
 ---
-title: "Microbial community analysis in R"
+title: "Analysis set2 updated"
 author: "Marko Suokas"
+always_allow_html: yes
 format: pdf
 editor: visual
-mainfont: Aptos
-monofont: PT Mono
-always_allow_html: yes
-header-includes:
-   \usepackage[dvipsnames]{xcolor}
-   \definecolor{teal}{rgb}{0.0, 0.5, 0.5}
-   \definecolor{ivory}{rgb}{1.0, 1.0, 0.94}
 ---
 
-```{r, include = FALSE}
+```{r, include = F}
 # This will allow to use different font sizes inside code chunks
-# Won't be included in the report
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
@@ -24,336 +17,257 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 
 #### Libraries
 
-```{r libraries, warning=FALSE, message=FALSE, size = "tiny"}
-library(phyloseq);packageVersion("phyloseq")
+```{r libraries, warning=F, message=F, size = "tiny"}
+library(mia);packageVersion("mia")
+library(vegan);packageVersion("vegan")
+library(scater);packageVersion("scater")
 library(tidyverse);packageVersion("tidyverse")
 library(kableExtra);packageVersion("kableExtra")
 library(patchwork);packageVersion("patchwork")
-library(mia);packageVersion("mia")
-library(ggplot2);packageVersion("ggplot2")
 library(ggthemes);packageVersion("ggthemes")
-library(vegan);packageVersion("vegan")
-library(scater);packageVersion("scater")
 ```
 
 \newpage
 
 #### Import
 
-Import tables as a tse object named dada
-
-```{r import1, warning = FALSE, message = FALSE, size = "tiny"}
-# Path variables
-asvfile <- "results_set2/asvs.tsv"
-metafile <- "data/set2_meta.tsv"
-taxafile <- "results_set2/taxonomy.tsv"
-#Abundance data is imported from tabular txt file, rownames stored and emptied
-counts <- read_tsv(asvfile, show_col_types = FALSE)
-ASV_names <- counts$ASV_names
-counts$ASV_names <- NULL
-#Metadata is imported from tabular txt file, rownames stored and emptied
-samples <- read_tsv(metafile, show_col_types = FALSE)
-sampleid <- samples$sampleid
-samples$sampleid <- NULL
-#Taxonomy table is imported tabular txt file, rownames stored and emptied
-taxonomy <-read_tsv(taxafile, show_col_types = FALSE)
-taxanames <- taxonomy$ASV_names
-taxonomy$ASV_names <- NULL
-#Abundance values should be in numeric matrix format
-counts <- as.matrix(counts)
-#And should be added to a SimpleList
-assays <-  SimpleList(counts = counts)
-#colData and rowData should be in DataFrame format
-colData <- DataFrame(colData)
-rowData <- DataFrame(rowData)
-#Create a TreeSummarized Experiment object
-dada <- TreeSummarizedExperiment(assays = assays,
-                                     colData = samples,
-                                     rowData = taxonomy)
-#Add amplicon variant names as rownames
-rownames(dada) <- ASV_names
+```{r objects, warning = F, message = F, size = "tiny"}
+#Rds files are easy way to save ja load data objects
+tse_dada <- readRDS("set2/tse_dada.rds")
+tse_vs97 <- readRDS("set2/tse_vs97.rds")
+tse_vs99 <- readRDS("set2/tse_vs99.rds")
+tse_emu <- readRDS("set2/tse_emu.rds")
 ```
 
-Import tables from qiime pipelines
+Agglomeration of objects to genus level.
 
-```{r import2, warning = FALSE, message = FALSE, size = "tiny"}
-# vsearch97
-asvfile <- "results_vsearch97/asvs_set2.tsv"
-taxafile <- "results_vsearch97/taxonomy_set2.tsv"
-#Abundance data is imported from tabular txt file, rownames stored and emptied
-counts <- read_tsv(asvfile, show_col_types = FALSE)
-ASV_names <- counts$ASV_names
-counts$ASV_names <- NULL
-#Metadata is imported from tabular txt file, rownames stored and emptied
-samples <- read_tsv(metafile, show_col_types = FALSE)
-sampleid <- samples$sampleid
-samples$sampleid <- NULL
-#Taxonomy table is imported tabular txt file, rownames stored and emptied
-taxonomy <-read_tsv(taxafile, show_col_types = FALSE)
-taxanames <- taxonomy$ASV_names
-taxonomy$ASV_names <- NULL
-#Abundance values should be in numeric matrix format
-counts <- as.matrix(counts)
-#And should be added to a SimpleList
-assays <-  SimpleList(counts = counts)
-#colData and rowData should be in DataFrame format
-colData <- DataFrame(colData)
-rowData <- DataFrame(rowData)
-#Create a TreeSummarized Experiment object
-vsearch97 <- TreeSummarizedExperiment(assays = assays,
-                                     colData = samples,
-                                     rowData = taxonomy)
-#Add amplicon variant names as rownames
-rownames(vsearch97) <- ASV_names
-#vsearch99
-asvfile <- "results_vsearch99/asvs_set2.tsv"
-taxafile <- "results_vsearch99/taxonomy_set2.tsv"
-#Abundance data is imported from tabular txt file, rownames stored and emptied
-counts <- read_tsv(asvfile, show_col_types = FALSE)
-ASV_names <- counts$ASV_names
-counts$ASV_names <- NULL
-#Metadata is imported from tabular txt file, rownames stored and emptied
-samples <- read_tsv(metafile, show_col_types = FALSE)
-sampleid <- samples$sampleid
-samples$sampleid <- NULL
-#Taxonomy table is imported tabular txt file, rownames stored and emptied
-taxonomy <-read_tsv(taxafile, show_col_types = FALSE)
-taxanames <- taxonomy$ASV_names
-taxonomy$ASV_names <- NULL
-#Abundance values should be in numeric matrix format
-counts <- as.matrix(counts)
-#And should be added to a SimpleList
-assays <-  SimpleList(counts = counts)
-#colData and rowData should be in DataFrame format
-colData <- DataFrame(colData)
-rowData <- DataFrame(rowData)
-#Create a TreeSummarized Experiment object
-vsearch99 <- TreeSummarizedExperiment(assays = assays,
-                                     colData = samples,
-                                     rowData = taxonomy)
-#Add amplicon variant names as rownames
-rownames(vsearch99) <- ASV_names
+```{r agglomerate, warning = F, message = F, size = "tiny"}
+#Agglomerate
+tse_dada<- agglomerateByRank(tse_dada, rank = "Genus", onRankOnly = T,
+                           na.rm = F)
+tse_vs97 <- agglomerateByRank(tse_vs97, rank = "Genus", onRankOnly = T,
+                          na.rm = F)
+tse_vs99 <- agglomerateByRank(tse_vs99, rank = "Genus", onRankOnly = T,
+                          na.rm = F)
+tse_emu <- agglomerateByRank(tse_emu, rank = "Genus", onRankOnly = T,
+                          na.rm = F)
+#Check number of variants
+nrow(tse_dada)
+nrow(tse_vs97)
+nrow(tse_vs99)
+nrow(tse_emu)
 ```
 
-\newpage
+Calculate relative abundance for assay data
 
-Number of variants in each object. In data set, we treated sequences little bit differently and truncated reads prior dereplication to equal length of 1400 bp. Equal length might decrease number of variants clustering produces.
-
-```{r variant_table, warning = FALSE, message = FALSE, size = "tiny"}
-#create new dataframe
-variants <- data.frame(Dada = nrow(dada), Vsearch97 = nrow(vsearch97),
-                       Vsearch99 = nrow(vsearch99))
-#table
-kable(variants, caption = "Number of variants" )  %>%
-  kable_styling(latex_options = c("HOLD_position", "striped")) %>%
-  row_spec(0, background = "teal", color = "ivory")
-```
-
-Agglomeration of all objects to genus level.
-
-```{r agglomerate, warning = FALSE, message = FALSE, size = "tiny"}
-#agglomeration to genus level
-DADA<- mergeFeaturesByRank(dada, rank = "Genus", onRankOnly = FALSE,
-                           na.rm = TRUE)
-VS97 <- agglomerateByRank(vsearch97, rank = "Genus", onRankOnly = FALSE,
-                          na.rm = TRUE)
-VS99 <- agglomerateByRank(vsearch99, rank = "Genus", onRankOnly = FALSE,
-                          na.rm = TRUE)
-#check number of variants
-nrow(DADA)
-nrow(VS97)
-nrow(VS99)
-```
-
-Transforming counts to relative abundances
-
-```{r rel_abundance, message = FALSE, warning = FALSE, size = "tiny"}
-#relabundance
-DADA <- transformAssay(DADA, assay.type = "counts",
+```{r rel_abundance, message = F, warning = F, size = "tiny"}
+tse_dada <- transformAssay(tse_dada, assay.type = "counts",
                                    method = "relabundance")
-VS97 <- transformAssay(VS97, assay.type = "counts",
+tse_vs97 <- transformAssay(tse_vs97, assay.type = "counts",
                                    method = "relabundance")
-VS99 <- transformAssay(VS99, assay.type = "counts",
+tse_vs99 <- transformAssay(tse_vs99, assay.type = "counts",
+                                   method = "relabundance")
+tse_emu <- transformAssay(tse_emu, assay.type = "counts",
                                    method = "relabundance")
 ```
 
 \newpage
 
-We will list 10 most abundant variants for each method
+Getting top10 features
 
-```{r top10, warning = FALSE, message = FALSE, size = "tiny"}
-#get top10 features
-top10_DADA <- getTopFeatures(DADA, top = 10, method = "mean",
+```{r dada, warning = F, message = F, size = "tiny"}
+top10_dada <- getTopFeatures(tse_dada, top = 10, method = "mean",
                               assay.type = "relabundance")
-top10_VS97 <- getTopFeatures(VS97, top = 10, method = "mean",
-                             assay.type = "relabundance")
-top10_VS99 <- getTopFeatures(VS99, top = 10, method = "mean",
-                             assay.type = "relabundance")
-#subset features based on top10 list
-DADA <- subsetFeatures(DADA, rowData(DADA)$Genus %in% top10_DADA)
-VS97 <- subsetFeatures(VS97, rowData(VS97)$Genus %in% top10_VS97)
-VS99 <- subsetFeatures(VS99, rowData(VS99)$Genus %in% top10_VS99)
-#create dataframes
-df_DADA <- data.frame(assays(DADA)$relabundance)
-df_DADA <- df_DADA %>% mutate(Genus = rownames(df_DADA)) %>%
-  filter(Genus %in% top10_DADA) %>% arrange(Genus)
-rownames(df_DADA) <- NULL
-df_DADA <- df_DADA[,c(7,1,2,3,4,5,6)]
-df_VS97 <- data.frame(assays(VS97)$relabundance)
-df_VS97 <- df_VS97 %>% mutate(Genus = rownames(df_VS97)) %>%
-  filter(Genus %in% top10_VS97) %>% arrange(Genus) %>%
-  mutate_at("Genus", str_replace, "Genus:", "")
-rownames(df_VS97) <- NULL
-df_VS97 <- df_VS97[,c(7,1,2,3,4,5,6)]
-df_VS99 <- data.frame(assays(VS99)$relabundance)
-df_VS99 <- df_VS99 %>% mutate(Genus = rownames(df_VS99)) %>%
-  filter(Genus %in% top10_VS99) %>% arrange(Genus) %>%
-  mutate_at("Genus", str_replace, "Genus:", "")
-rownames(df_VS99) <- NULL
-df_VS99 <- df_VS99[,c(7,1,2,3,4,5,6)]
+#Fetch assay table and filter it
+dada_table <- data.frame(assays(tse_dada)$relabundance)
+dada_table <- dada_table %>% rownames_to_column(var = "Genus") %>%
+  filter(Genus %in% top10_dada)
+kable(dada_table, digits=2, caption = "Dada2 denoiser") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), font_size = 11) %>%
+  row_spec(0, background = "teal", color = "white")
 ```
 
-Table 2.
-
-```{r table_dada, size = "small"}
-kable(df_DADA, digits=2, caption = "Top10 microbes using Dada2") %>%
-  kable_styling(latex_options = c("HOLD_position", "striped")) %>%
-  row_spec(0, background = "teal", color = "ivory")
+```{r vs97, warning = F, message = F, size = "tiny"}
+top10_vs97 <- getTopFeatures(tse_vs97, top = 10, method = "mean",
+                              assay.type = "relabundance")
+#Fetch assay table and filter it
+vs97_table <- data.frame(assays(tse_vs97)$relabundance)
+vs97_table <- vs97_table %>% rownames_to_column(var = "Genus") %>%
+  filter(Genus %in% top10_vs97)
+kable(vs97_table, digits=2, caption = "Vsearch 97") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), font_size = 11) %>%
+  row_spec(0, background = "teal", color = "white")
 ```
 
 \newpage
 
-Table 3.
-
-```{r table_vs97, size = "small"}
-kable(df_VS97, digits=2, caption = "Top10 microbes using Vsearch 97") %>%
-  kable_styling(latex_options = c("HOLD_position", "striped")) %>%
-  row_spec(0, background = "teal", color = "ivory")
+```{r vs99, size = "tiny"}
+top10_vs99 <- getTopFeatures(tse_vs99, top = 10, method = "mean",
+                              assay.type = "relabundance")
+#Fetch assay table and filter it
+vs99_table <- data.frame(assays(tse_vs99)$relabundance)
+vs99_table <- vs99_table %>% rownames_to_column(var = "Genus") %>%
+  filter(Genus %in% top10_vs99)
+kable(vs99_table, digits=2, caption = "Vsearch 99") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), font_size = 11) %>%
+  row_spec(0, background = "teal", color = "white")
 ```
 
-Table 4.
-
-```{r table_vs99, size = "small"}
-kable(df_VS99, digits=2, caption = "Top10 microbes using Vsearch 99") %>%
-  kable_styling(latex_options = c("HOLD_position", "striped")) %>%
-  row_spec(0, background = "teal", color = "ivory")
+```{r emu, warning = F, message = F, size = "tiny"}
+top10_emu <- getTopFeatures(tse_emu, top = 10, method = "mean",
+                              assay.type = "relabundance")
+#Fetch assay table and filter it
+emu_table <- data.frame(assays(tse_dada)$relabundance)
+emu_table <- emu_table %>% rownames_to_column(var = "Genus") %>%
+  filter(Genus %in% top10_emu)
+kable(emu_table, digits=2, caption = "Emu") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), font_size = 11) %>%
+  row_spec(0, background = "teal", color = "white")
 ```
 
 \newpage
 
-For barplot, we melt assay data
+For barplot it is necessary to create long table
 
-```{r melt_data, warning = FALSE, message = FALSE, size = "tiny"}
-#transform data
-assay_dada <- meltAssay(DADA, assay.type="relabundance")
-names(assay_dada) <- c("Genus","Sample","Abundance")
-assay_vs97 <- meltAssay(VS97, assay.type="relabundance")
-names(assay_vs97) <- c("Genus", "Sample", "Abundance")
-assay_vs99 <- meltAssay(VS99, assay.type="relabundance")
-names(assay_vs99) <- c("Genus", "Sample", "Abundance")
+```{r long_table, warning = F, message = F, size = "tiny"}
+#transform data to ggplot
+dada_long <- dada_table %>% pivot_longer(cols = starts_with("barcode"),
+                                         names_to = "Sample",
+                                         values_to = "Abundance") %>%
+  mutate(Method = "Dada")
+#transform data to ggplot
+vs97_long <- vs97_table %>% pivot_longer(cols = starts_with("barcode"),
+                                         names_to = "Sample",
+                                         values_to = "Abundance") %>%
+  mutate(Method = "Vsearch97")
+#transform data to ggplot
+vs99_long <- vs99_table %>% pivot_longer(cols = starts_with("barcode"),
+                                         names_to = "Sample",
+                                         values_to = "Abundance") %>%
+  mutate(Method = "Vsearch99")
+#transform data to ggplot
+emu_long <- emu_table %>% pivot_longer(cols = starts_with("barcode"),
+                                         names_to = "Sample",
+                                         values_to = "Abundance") %>%
+  mutate(Method = "Emu")
+#combine
+long_table <- bind_rows(dada_long, vs97_long, vs99_long, emu_long)
 ```
 
 Plot object
 
-```{r plot_abundance, warning = FALSE, message = FALSE, size = "tiny"}
-#indlude used method in each assay table
-assay_dada$Method <- "DADA"
-assay_vs97$Method <- "VS97"
-assay_vs99$Method <- "VS99"
-#use bind_rows to combine all
-combined_data <- bind_rows(assay_dada, assay_vs97, assay_vs99)
-#create plot_object
-abund <- ggplot(combined_data, aes(x = Sample, y = Abundance, fill = Genus)) +
-  geom_bar(stat = "identity", position = "stack") + facet_wrap(~ Method) +
-  labs(title = "Relative Abundance by Sample and Method", 
-       x = "Sample", y = "Relative Abundance") +
-  theme_fivethirtyeight(base_size=8) + scale_fill_stata() + theme(axis.text.x = element_text(angle = 90))
+```{r, warning = F, message = F, size = "tiny"}
+#Create stacked barplot
+ab_plot <- ggplot(long_table, aes(x = Sample, y = Abundance, fill = Genus)) + 
+  geom_bar(stat = "identity", alpha=0.8) + facet_wrap(~Method) +
+  theme_pander(base_size = 9) + scale_fill_stata() +
+  theme(axis.text.x = element_text(angle = 90))
 ```
 
-```{r, size="small", fig.dim=c(7,5)}
-abund
+```{r, size = "tiny"}
+ab_plot
 ```
 
 \newpage
 
-Alpha diversity is compared by calculating Shannon index for each sample and method
+Alpha diversity measured by Shannon index
 
-```{r shannon, warning = FALSE, message = FALSE, size = "tiny"}
+```{r shannon, warning = F, message = F, size = "tiny"}
 #dada
-dada <- transformAssay(dada, assay.type = "counts", method = "relabundance",
+tse_dada <- readRDS("set2/tse_dada.rds")
+tse_dada<- transformAssay(tse_dada, assay.type = "counts", method = "relabundance",
                        name = "relabundance")
-dada <- estimateDiversity(dada, assay.type="relabundance", index="shannon")
+tse_dada <- estimateDiversity(tse_dada, assay.type="relabundance", index="shannon")
 #vsearch97
-vsearch97 <- transformAssay(vsearch97, assay.type = "counts", method = "relabundance",
+tse_vs97 <- readRDS("set2/tse_vs97.rds")
+tse_vs97 <- transformAssay(tse_vs97, assay.type = "counts", method = "relabundance",
                        name = "relabundance")
-vsearch97 <- estimateDiversity(vsearch97, assay.type="counts", index="shannon")
+tse_vs97 <- estimateDiversity(tse_vs97, assay.type="counts", index="shannon")
 #vsearch99
-vsearch99 <- transformAssay(vsearch99, assay.type = "counts", method = "relabundance",
+tse_vs99 <- readRDS("set2/tse_vs99.rds")
+tse_vs99 <- transformAssay(tse_vs99, assay.type = "counts", method = "relabundance",
                        name = "relabundance")
-vsearch99 <- estimateDiversity(vsearch99, assay.type="counts",index="shannon")
-#combine
-alpha <- data.frame(dada = colData(dada)$shannon, vsearch97 = colData(vsearch97)$shannon, vsearch99 = colData(vsearch99)$shannon)
+tse_vs99 <- estimateDiversity(tse_vs99, assay.type="counts",index="shannon")
+#emu
+tse_emu <- readRDS("set2/tse_emu.rds")
+tse_emu <- transformAssay(tse_emu, assay.type = "counts", method = "relabundance",
+                       name = "relabundance")
+tse_emu <- estimateDiversity(tse_emu, assay.type="counts",index="shannon")
+
+#combine results
+alpha <- data.frame(dada = colData(tse_dada)$shannon,
+                    vsearch97 = colData(tse_vs97)$shannon,
+                    vsearch99 = colData(tse_vs99)$shannon,
+                    emu = colData(tse_emu)$shannon)
 ```
 
-Table 5.
-
-```{r shannon2, message = FALSE, warning = FALSE, size = "small"}
+```{r shannon_table, message = F, warning = F, size = "tiny"}
 #table
-kable(alpha, digits=2, caption = "Shannon index using different pipelines") %>%
-  kable_styling(latex_options = c("HOLD_position", "striped")) %>%
-  row_spec(0, background = "teal", color = "ivory")
+kable(alpha, digits=2, caption = "Shannon index") %>%
+  kable_styling(latex_options = c("HOLD_position", "striped"), font_size = 11) %>%
+  row_spec(0, background = "teal", color = "white")
 ```
 
-Beta diversity is compared using bray-curtis dissimilarity
+Beta diversity measured by Bray-Curtis dissimilarity
 
-```{r braycurtis, warning = FALSE, message = FALSE, size = "tiny"}
+```{r braycurtis, warning = F, message = F, size = "tiny"}
 #create bray-curtis distance matrix
-dada <- runMDS(dada, FUN = vegan::vegdist, method = "bray",
+tse_dada <- runMDS(tse_dada, FUN = vegan::vegdist, method = "bray",
                name="PCoA_BC", exprs_values = "relabundance")
-dada_bray <- plotReducedDim(dada, "PCoA_BC")
+dada_bray <- plotReducedDim(tse_dada, "PCoA_BC")
 #create dataframe for plot
 bray_dada_df <- data.frame(pcoa1 = dada_bray$data[,1],
                            pcoa2 = dada_bray$data[,2],
-                           Sample = colData(dada)$Sampleid)
-vsearch99 <- runMDS(vsearch99, FUN = vegan::vegdist, method = "bray",
+                           Sample = colData(tse_dada)$Name)
+tse_vs99 <- runMDS(tse_vs99, FUN = vegan::vegdist, method = "bray",
                name="PCoA_BC", exprs_values = "relabundance")
-vsearch99_bray <- plotReducedDim(vsearch99, "PCoA_BC")
+vsearch99_bray <- plotReducedDim(tse_vs99, "PCoA_BC")
 #create dataframe for plot
 bray_vsearch99_df <- data.frame(pcoa1 = vsearch99_bray$data[,1],
                            pcoa2 = vsearch99_bray$data[,2],
-                           Sample = colData(vsearch99)$Sampleid)
-vsearch97 <- runMDS(vsearch97, FUN = vegan::vegdist, method = "bray",
+                           Sample = colData(tse_vs99)$Name)
+tse_vs97 <- runMDS(tse_vs97, FUN = vegan::vegdist, method = "bray",
                name="PCoA_BC", exprs_values = "relabundance")
-vsearch97_bray <- plotReducedDim(vsearch97, "PCoA_BC")
+vsearch97_bray <- plotReducedDim(tse_vs97, "PCoA_BC")
 #create dataframe for plot
 bray_vsearch97_df <- data.frame(pcoa1 = vsearch97_bray$data[,1],
                            pcoa2 = vsearch97_bray$data[,2],
-                           Sample = colData(vsearch97)$Sampleid)
+                           Sample = colData(tse_vs97)$Name)
+tse_emu <- runMDS(tse_emu, FUN = vegan::vegdist, method = "bray",
+               name="PCoA_BC", exprs_values = "relabundance")
+emu_bray <- plotReducedDim(tse_emu, "PCoA_BC")
+#create dataframe for plot
+bray_emu_df <- data.frame(pcoa1 = emu_bray$data[,1],
+                           pcoa2 = emu_bray$data[,2],
+                           Sample = colData(tse_emu)$Name)
 #add method for each dataframe and combine
 bray_dada_df$Method <- "Dada"
 bray_vsearch99_df$Method <- "Vsearch99"
 bray_vsearch97_df$Method <- "Vsearch97"
-combined_pcoa <- bind_rows(bray_dada_df, bray_vsearch99_df, bray_vsearch97_df)
+bray_emu_df$Method <- "Emu"
+combined_pcoa <- bind_rows(bray_dada_df, bray_vsearch99_df, bray_vsearch97_df, bray_emu_df)
 #create plot object
 plot_pcoa <- ggplot(data = combined_pcoa, aes(x=pcoa1, y=pcoa2,
-                                              color = Sample, shape = Method)) +
-  labs(title = "Relative Abundance by Sample and Method", 
+                                              color = Method, shape = Sample)) +
+  labs(title = "Bray Curtis", 
        x = "pcoa1", y = "pcoa2") + geom_point(size=2) +
   theme_fivethirtyeight(base_size=8) + scale_color_stata()
 ```
 
-\newpage
+Plot pcoa
 
-Pcoa plot
-
-```{r pcoa_plot, warning = FALSE, message = FALSE, size = "small"}
+```{r pcoa_plot, warning = F, message = F, size = "tiny"}
 plot_pcoa
 ```
 
+\newpage
+
 #### Observations
 
-Overall results are highly similar. However, it should be noted that diversity in analysed samples is lower than in many environmental or clinical samples.
+The overall results are generally consistent across methods, though it is important to note that the diversity in the analyzed samples is lower than what is typically found in most biological samples.
 
-Clustering methods produce high number of variants compared to denoising, but core microbes remain unchanged. Ten most common variants are almost identical. Surprisingly, denoising has slightly higher shannon index value in 4 out of 6 samples. In bray-curtis dissimilarity analysis, only one out of six samples is somewhat different when using denoising.
+Clustering methods generate a higher number of variants compared to denoising, but the most abundant microbes remain consistent across methods. Interestingly, denoising yields a slightly higher Shannon index in 4 out of 6 samples. In the Bray-Curtis dissimilarity analysis, only one out of six samples shows a notable difference when denoising is applied.
 
-Currently, it might be safest to to use vsearch clustering for long amplicons until we have more data on how denoiser performs on larger data sets. Recommended identity level is 99 %.
+The Emu profiler produced the smallest number of taxa, with only 92 identified. This lower diversity is also reflected in the Shannon index. In the Bray-Curtis plot, Emu displays noticeable differences compared to other methods, although the extent of this variation depends on the sample.
+
+Given the current data, it may be prudent to use vsearch clustering for long amplicons until more comprehensive data is available on the performance of other methods in more complex datasets. A 99% identity level is recommended, along with filtering the least abundant variants to manage data size effectively. In this data set, there are 2800 "OTUs" with more than 10 counts globally.

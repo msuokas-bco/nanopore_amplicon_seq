@@ -1,9 +1,12 @@
 # nanopore_amplicon_seq
-Analysis of full length 16S rRNA amplicons (27F-1492R) sequenced on ONT Minion flow-cell
+
+Analysis of full length 16S rRNA amplicons (27F-1492R) sequenced on ONT Minion R10.4.1
 
 Contains analysis of two sets of six samples.
 
-Read processing files contain sequence processing pipelines and analysis files actual data analysis.
+Results have been divided in sequence read prosessing and data analysis files.
 
-Data is currently unpublished, so source and resource files are hidden and samples anonymised. Treat other data with respect. 
+Treatment of emu result files are in separate file emu_data.qmd
+
+Data is currently unpublished, so source and resource files are hidden and samples anonymised. Please, treat data with respect. 
 

@@ -1,7 +1,7 @@
 ---
 title: "Processing nanopore reads"
 author: "Marko Suokas"
-format: docx
+format: pdf
 pdf-engine: lualatex
 editor: visual
 mainfont: Aptos
@@ -13,7 +13,7 @@ header-includes:
    \definecolor{ivory}{rgb}{1.0, 1.0, 0.94}
 ---
 
-```{r, include=FALSE}
+```{r, include=F}
 # This will allow to use different font sizes inside code chunks
 # Won't be included in the report
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
@@ -25,17 +25,19 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 
 #### Preprocess reads
 
-Dorado doesn't support demultiplexing of dual indexes at 5' and 3' ends. Additionally, library reads are able to ligate in either orientation. Most straightforward approach to demultiplex reads, is to utilise cutadapt. You can demultiplex index pairs using linked adapters approach in forward and reverse orientation, then process with scripts to reverse complement reverse read files and merge each of them with forward reads.
+Dorado doesn't support demultiplexing of dual indexes on both 5' and 3' ends. Additionally, in ligated libraries reads can be either orientation. Our approach to demultiplex reads is using cutadapt. Index pairs are searched using linked adapters approach in forward and reverse orientation, then scripts are used to reverse complement reverse reads. Finally reads are merged
+
+Please note that autocorrect often change double dashes in command examples.
 
 Extracting forward reads to fastq file can be performed with following command
 
-*cutadapt -e 0 -O 12 -g file:\~/scripts/barcodes.fasta --trimmed-only -m 1200  -o "fdemuxed/{name}.fastq.gz" reads.fastq.gz*
+*cutadapt -e 0 -O 12 -g file:\~/scripts/barcodes.fasta --trimmed-only -m 1200 -o "fdemuxed/{name}.fastq.gz reads.fastq.gz*
 
 Command will extract barcodes defined in barcodes.fasta file and output matches into individual files in fdemuxed subdirectory. Minimum length is set in example to 1200 bp.
 
 Extracting reverse reads using reverse complemented barcodes.fasta file
 
-*cutadapt -e 0 -O 12 -g file:/users/suokasma/scripts/rev_barcodes.fasta --trimmed-only -m 1200  -o "rdemuxed/{name}.fastq.gz" reads.fastq.gz*
+*cutadapt -e 0 -O 12 -g file:\~/scripts/rev_barcodes.fasta --trimmed-only -m 1200 -o "rdemuxed/{name}.fastq.gz reads.fastq.gz*
 
 Reads are demultiplexed into separate directory
 
@@ -43,57 +45,56 @@ Reads are demultiplexed into separate directory
 
 Next we use bash script that will process each reverse read file and reverse complement them using basic command
 
-*seqkit seq -rp --seq-type -o reverse_comp.fastq.gz DNA reverse_out.fastq.gz*
+*seqkit seq -rp --seq-type DNA -o reverse_comp.fastq.gz reverse_out.fastq.gz*
 
-Final step is merging. You can use also for this simple bash script that merge files with same base name from two separate directories using basic command
+Final step is merge. You can use simple bash script that will merge files with same base name from two separate directories using basic command
 
-*zcat forward_out.fastq.gz reverse_comp.fastq.gz \> merged_reads.fastq.gz*
+*zcat forward_out.fastq.gz reverse_comp.fastq.gz \>merged_reads.fastq.gz*
 
-##### Trimming PCR amplification primers
-
-Finally, you can use cutadapt and bash scripts to trim forward and reverse PCR primers from sequence files.
+Finally, you can use cutadapt and bash scripts to trim forward and reverse PCR primers from sequence reads.
 
 #### Import set1 to R
 
 Load libraries
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r, warning = F, message = F, size = "tiny"}
 library(dada2);packageVersion("dada2")
 library(knitr);packageVersion("knitr")
 library(Biostrings);packageVersion("Biostrings")
-library(DECIPHER);packageVersion("DECIPHER")
-library(phyloseq);packageVersion("phyloseq")
 library(tidyverse);packageVersion("tidyverse")
 library(kableExtra);packageVersion("kableExtra")
 library(mia);packageVersion("mia")
-library(qiime2R);packageVersion("qiime2R")
+library(ape);packageVersion("ape")
 ```
 
 \newpage
 
 Set variables
 
-```{r, warning=FALSE,message=FALSE, size="tiny"}
+```{r variables, warning = F, message = F, size = "tiny"}
 # Path variables
 path <- "data/processed/set1"
 training <- "~/feature_classifiers/SILVA_SSU_r138_2019.RData"
+silva <- "~/feature_classifiers/silva_nr99_v138.1_train_set.fa.gz"
+species <- "~/feature_classifiers/silva_species_assignment_v138.1.fa.gz"
 meta_file <- "data/set1_meta.tsv"
-exportloc <- "results_set1/"
-# Variables: truncation length, phix (Illumina)
+exportloc <- "set1/"
+# Variable truncation length
 truncation <- 1400
 #Creates results directory
 dir.create(exportloc)
-#metadata
-metadata <- data.frame(read_tsv(meta_file))
+#metadata file to df
+metadata <- read_tsv(meta_file, show_col_types = F)
+metadata <- column_to_rownames(metadata, var = "Sampleid")
 ```
 
-For the project, we take advantage of computing power of CSC puhti server and import already executed data objects from there. R code is unaltered and can can be executed by turning eval to TRUE.
+For project, we took advantage of computing power of CSC and imported already executed data objects. R code is unaltered. Execution is controlled by eval parameter in code chunk. RDS files also save resources and time when document is edited and checked.
 
-```{r, warning = FALSE, message = FALSE, size = "tiny"}
+```{r create_lists, warning = F, message = F, size = "tiny"}
 #List files inside directory
 list.files(path)
 # Forward fastq filenames have format: SAMPLENAME_R1_001.fastq
-fnFs <- sort(list.files(path, pattern="_trimmed_all.fastq.gz", full.names = TRUE))
+fnFs <- sort(list.files(path, pattern="_trimmed_all.fastq.gz", full.names = T))
 # Extract sample names, assuming filenames have format: SAMPLENAME_XXX.fastq
 sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
 ```
@@ -102,7 +103,7 @@ sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
 
 Plot sequence quality profile for samples
 
-```{r, warning = FALSE, message = FALSE, size = "tiny", eval = FALSE}
+```{r quality_profile, warning = F, message = F, size = "tiny", eval = F}
 # Base quality plot
 prsetI <- plotQualityProfile(fnFs[1:6])
 prsetI
@@ -117,9 +118,9 @@ prsetI
 
 #### Filter sequence data
 
-Filtering reads (maxEE ≈ 1 error/200 bp sequence is good starting point for this amplicon)
+Filtering reads (maxEE ≈ 1 error/200 bp sequence should be good starting point for this amplicon)
 
-```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
+```{r filterandtrim, warning=F, message=F, size="tiny", eval = F}
 # Filtered files are placed in filtered subdirectory
 filtFs <- file.path(path, "filtered", paste0(sample.names,
                                              "_F_filt.fastq.gz"))
@@ -127,8 +128,7 @@ filtFs <- file.path(path, "filtered", paste0(sample.names,
 names(filtFs) <- sample.names
 out <- filterAndTrim(fnFs, filtFs, truncLen=truncation,
                      maxN = 0, maxEE = 7 , truncQ = 2,
-                     compress = TRUE, multithread = TRUE,
-                     rm.phix = FALSE)
+                     compress = T, multithread = T, rm.phix = F)
 ```
 
 ```{r, size="tiny"}
@@ -137,12 +137,12 @@ out <- readRDS("rds/set1_rds/out.rds")
 
 #### Learn error rates
 
-```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
+```{r, warning = F, message = F, size = "tiny", eval = F}
 # Forward read error rate
-errF <- learnErrors(filtFs, multithread = TRUE)
+errF <- learnErrors(filtFs, multithread = T)
 ```
 
-```{r, size="tiny"}
+```{r, size = "tiny"}
 errF <- readRDS("rds/set1_rds/errF.rds")
 ```
 
@@ -150,26 +150,28 @@ errF <- readRDS("rds/set1_rds/errF.rds")
 
 Plot error rates
 
-```{r, warning=FALSE, message=FALSE, size="tiny", fig.dim=c(6.5,6)}
+```{r plot_errors, warning = F, message = F, size = "tiny", fig.dim=c(6.5,6)}
 # Plotting error rate profile for forward reads
-plotErrors(errF, nominalQ = TRUE)
+plotErrors(errF, nominalQ = T)
 ```
 
 \newpage
 
 #### Denoise
 
-```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
-dadaFs <- dada(derepFs, err = errF, multithread = TRUE)
+```{r, warning = F, message = F, size = "tiny", eval = F}
+dadaFs <- dada(derepFs, err = errF, multithread = T)
 ```
 
-```{r, size="tiny"}
+```{r, size = "tiny"}
 dadaFs <- readRDS("rds/set1_rds/dadaFs.rds")
 ```
 
 #### Build asv table
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+Dimensions tell us number of samples and variants
+
+```{r asv_table, warning = F, message = F, size = "tiny"}
 seqtab <- makeSequenceTable(dadaFs)
 # Dimensions of ASV table
 dim(seqtab)
@@ -177,9 +179,9 @@ dim(seqtab)
 
 #### Chimera removal
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
+```{r chimeric, warning = F, message = F, size = "tiny"}
 seqtab.nochim <- removeBimeraDenovo(seqtab, method = "consensus",
-                                    multithread = TRUE, verbose = TRUE)
+                                    multithread = T, verbose = F)
 dim(seqtab.nochim)
 ```
 
@@ -187,16 +189,16 @@ dim(seqtab.nochim)
 
 #### Summary
 
-```{r, warning=FALSE, message=FALSE, size="small"}
+```{r summary_table, warning = F, message = F, size="tiny"}
 getN <- function(x) sum(getUniques(x))
 track <- cbind(out, sapply(dadaFs, getN), rowSums(seqtab.nochim),
                rowSums(seqtab.nochim != 0))
 #If processing a single sample, remove the sapply calls
 colnames(track) <- c("Input", "Filtered", "DenoisedF", "Nonchimeric",
                      "N:o of variants")
-rownames(track) <- metadata$Name
+rownames(track) <- rownames(metadata)
 kable(track, caption="Summary table")  %>%
-  kable_styling(latex_options=c("striped", "HOLD_position")) %>%
+  kable_styling(latex_options=c("striped", "HOLD_position"), font_size = 12) %>%
                 row_spec(0,background = "teal", color = "ivory")
 ```
 
@@ -204,183 +206,185 @@ kable(track, caption="Summary table")  %>%
 
 #### Taxonomy assignment
 
-IdTaxa from DECIPHER package
+Taxonomy classification against Silva 138.1 including species information.
 
-```{r, warning=FALSE, message=FALSE, size="tiny", eval = FALSE}
-#Create a DNAStringSet from the ASV sequences
-repseq <- DNAStringSet(getSequences(seqtab.nochim))
-# CHANGE TO THE PATH OF YOUR TRAINING SET
-load(training)
-ids <- IdTaxa(repseq, trainingSet, strand = "top",
-              processors = 3, verbose = FALSE,
-              threshold = 50)
-ranks <- c("domain", "phylum", "class", "order", "family",
-           "genus", "species") 
-# Convert the output to a matrix analogous to the output from assignTaxonomy
-taxid <-t(sapply(ids, function(x) {
-        m <- match(ranks, x$rank)
-        taxa <- x$taxon[m]
-        taxa[startsWith(taxa, "unclassified_")] <- NA
-        taxa
-}))
-colnames(taxid) <- ranks; rownames(taxid) <- getSequences(seqtab.nochim)
+```{r, warning = F, message = F, size = "tiny", eval = F}
+taxonomy <- assignTaxonomy(seqtab.nochim, silva, multithread=3)
+taxonomy <- addSpecies(taxonomy, species)
+saveRDS(taxonomy, "rds/set1_rds/taxonomy.rds")
 ```
 
-```{r, size="tiny"}
-taxid <- readRDS("rds/set1_rds/taxid.rds")
+```{r, size = "tiny"}
+taxonomy <- readRDS("rds/set1_rds/taxonomy.rds")
 ```
 
-#### Create phyloseq object
+#### Create TSE object
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-pseq <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows = FALSE),
-                 tax_table(taxid))
-row.names(metadata) <- sample_names(pseq)
-sample_data(pseq) <- metadata
-pseq
-```
-
-Sequence data is stored as taxa_names. We will store sequences as refseq and create numbered variant names
-
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-#create DNA object and store sequences 
-seqs <- DNAStringSet(taxa_names(pseq))
-names(seqs) <- taxa_names(pseq)
-pseq <- merge_phyloseq(pseq, seqs)
-#new variant names
-taxa_names(pseq) <- paste0("ASV", seq(ntaxa(pseq)))
-#capitalise taxonomic ranks
-colnames(tax_table(pseq)) <- c("Kingdom", "Phylum", "Class", 
-  "Order", "Family", "Genus", "Species")
+```{r, warning = F, message = F, size = "tiny"}
+#Preparing counts and variant sequences
+counts <- t(seqtab.nochim)
+repseq <- DNAStringSet(rownames(counts))
+ASV_names <- paste0("ASV", seq(nrow(counts)))
+names(repseq) <- ASV_names
+rownames(counts) <- NULL
+#Preparing taxonomy
+rownames(taxonomy) <- NULL
+#Create tse
+tse_dada <- TreeSummarizedExperiment(assays = list(counts = counts),
+                                     rowData = DataFrame(taxonomy),
+                                     colData = DataFrame(metadata))
+rownames(tse_dada) <- ASV_names
+#Reference sequences
+referenceSeq(tse_dada) <- repseq
+#The object
+tse_dada
 ```
 
 #### Write results to files
 
-Abundance table is transponed and written as tsv file
+Abundance table into tsv file
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-#variant names in rows
-ASV_names <- taxa_names(pseq)
+```{r, warning = F, message = F, size = "tiny"}
 #sample names will be columns
-ASV_counts <- t(otu_table(pseq))
-ASVdf <- (data.frame(ASV_names,ASV_counts))
+ASVdf <- (data.frame(ASV_names,assays(tse_dada)$counts))
 #write
-write_tsv(ASVdf, paste0(exportloc,"asvs.tsv"))
+write_tsv(ASVdf, paste0(exportloc,"asv_dada.tsv"))
 ```
 
-Likewise taxonomy table is saved as tsv
+Taxonomy table into tsv file
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-#variant names in rows
-ASV_names <- taxa_names(pseq)
-#taxonomy ranks in columns
-taxonomy <- (data.frame(ASV_names, tax_table(pseq)))
+```{r, warning = F, message = F, size = "tiny"}
+taxdf <- data.frame(ASV_names, rowData(tse_dada))
 #write
-write_tsv(taxonomy,paste0(exportloc,"taxonomy.tsv"))
+write_tsv(taxdf, paste0(exportloc,"taxonomy_dada.tsv"))
 ```
 
-Variant sequences are saved into fasta file
+\newpage
 
-```{r, warning=FALSE, message=FALSE, size="tiny"}
-pseq %>% refseq() %>% writeXStringSet(paste0(exportloc,"repseq.fasta"),
-                                      append = FALSE, compress = FALSE,
+Variant sequences into fasta file
+
+```{r, warning = F, message = F, size = "tiny"}
+writeXStringSet(repseq, paste0(exportloc, "repseq_dada.fasta"),
+                                      append = F, compress = F,
                                       format = "fasta")
+```
+
+Metadata into tsv file
+
+```{r, warning = F, message = F, size = "tiny"}
+metadf <- metadata %>% rownames_to_column(var = "Sampleid")
+#write
+write_tsv(metadf, paste0(exportloc,"metadata_dada.tsv"))
+```
+
+Add phylotree and save object
+
+```{r, warning = F, message = F, size = "tiny"}
+tree <- read.tree("set1/tree.nwk")
+rowTree(tse_dada) <- tree
+saveRDS(tse_dada, "set1/tse_dada.rds")
 ```
 
 \newpage
 
 #### Vsearch\@97%
 
-Data has been processed in qiime, except feature classification
+Data has been processed in qiime, except taxonomic classification
 
-```{r, warning = FALSE, message = FALSE, size = "tiny"}
-#read qiime2 table
-vs97 <- readQZA("data/vsearch/97/filtered-table.qza")
-#reorder samples
+```{r, warning = F, message = F, size = "tiny"}
+#process qiime2 feature table
+vs97 <- read_tsv("data/set1/feature-table97.tsv", show_col_types = F)
+ASV_names <- paste0("ASV", seq(nrow(vs97)))
 vs97 <- vs97[, order(colnames(vs97))]
-#read taxonomy
-otu_taxonomy <- readRDS("data/vsearch/97/taxid.rds")
-pseq_vsearch97 <- phyloseq(otu_table(vs97, taxa_are_rows = TRUE),
-                 tax_table(otu_taxonomy))
-#change names
-taxa_names(pseq_vsearch97) <- paste0("ASV", seq(ntaxa(pseq_vsearch97)))
-#capitalise taxonomic ranks
-colnames(tax_table(pseq_vsearch97)) <- c("Kingdom", "Phylum", "Class", 
-  "Order", "Family", "Genus", "Species")
-#create DNA object and store sequences 
-seqs <- readDNAStringSet("data/vsearch/97/dna-sequences.fasta")
-names(seqs) <- taxa_names(pseq_vsearch97)
-pseq_vsearch97 <- merge_phyloseq(pseq_vsearch97, seqs)
+vs97[,1] <- NULL
+rownames(vs97) <- NULL
+#process decipher taxonomy
+taxonomy <- readRDS("rds/set1_rds/taxonomy_vsearch97.rds")
+rownames(taxonomy) <- NULL
+#process repseq fasta
+seqs <- readDNAStringSet("data/set1/dna-sequences97.fasta")
+names(seqs) <- ASV_names
+#create tse
+tse_vs97 <- TreeSummarizedExperiment(assays = list(counts = vs97),
+                                     rowData = DataFrame(taxonomy),
+                                     colData = DataFrame(metadata))
+rownames(tse_vs97) <- ASV_names
+#Reference sequences
+referenceSeq(tse_vs97) <- seqs
+#The object
+tse_vs97
 ```
 
-Write vsearch97 after data wrangling
+Write vsearch97 object
 
-```{r, warning = FALSE, message = FALSE, size = "tiny"}
-#create_directory
-results <- "results_vsearch97/"
-dir.create(results)
+```{r, warning = F, message = F, size = "tiny"}
 #variant_table
-ASV_names <- taxa_names(pseq_vsearch97)
-ASV_counts <- otu_table(pseq_vsearch97)
-ASVdf <- (data.frame(ASV_names,ASV_counts))
-write_tsv(ASVdf, paste0(results,"asvs_set1.tsv"))
+ASVdf <- data.frame(ASV_names, assays(tse_vs97)$counts)
+write_tsv(ASVdf, "set1/asv_vs97.tsv")
 #taxonomy
-ASV_names <- taxa_names(pseq_vsearch97)
-taxonomy <- (data.frame(ASV_names, tax_table(pseq_vsearch97)))
-write_tsv(taxonomy,paste0(results,"taxonomy_set1.tsv"))
+taxonomy <- data.frame(ASV_names, rowData(tse_vs97))
+write_tsv(taxonomy, "set1/taxonomy_vs97.tsv")
 #sequences
-refseq(pseq_vsearch97) %>% writeXStringSet(paste0(results,"repseq_set1.fasta"),
-                                      append = FALSE, compress = FALSE,
+tse_vs97 %>% referenceSeq() %>% writeXStringSet("set1/repseq97.fasta",
+                                      append = F, compress = F,
                                       format = "fasta")
+#read and add tree
+tree <- read.tree("set1/tree_vs97.nwk")
+rowTree(tse_vs97) <- tree
+#save rds
+saveRDS(tse_vs97, "set1/tse_vs97.rds")
 ```
 
 \newpage
 
 #### Vsearch\@99%
 
-```{r, warning = FALSE, message = FALSE, size = "tiny"}
-#read qiime2 table
-vs99 <- readQZA("data/vsearch/99/filtered-table.qza")
-#reorder samples
+```{r, warning = F, message = F, size = "tiny"}
+#process qiime2 feature table
+vs99 <- read_tsv("data/set1/feature-table99.tsv", show_col_types = F)
+ASV_names <- paste0("ASV", seq(nrow(vs99)))
 vs99 <- vs99[, order(colnames(vs99))]
-#read taxonomy
-otu_taxonomy <- readRDS("data/vsearch/99/taxid.rds")
-pseq_vsearch99 <- phyloseq(otu_table(vs99, taxa_are_rows = TRUE),
-                 tax_table(otu_taxonomy))
-#change names
-taxa_names(pseq_vsearch99) <- paste0("ASV", seq(ntaxa(pseq_vsearch99)))
-#capitalise taxonomic ranks
-colnames(tax_table(pseq_vsearch99)) <- c("Kingdom", "Phylum", "Class", 
-  "Order", "Family", "Genus", "Species")
-#create DNA object and store sequences 
-seqs <- readDNAStringSet("data/vsearch/99/dna-sequences.fasta")
-names(seqs) <- taxa_names(pseq_vsearch99)
-pseq_vsearch99 <- merge_phyloseq(pseq_vsearch99, seqs)
+vs99[,1] <- NULL
+rownames(vs99) <- NULL
+#process decipher taxonomy
+taxonomy <- readRDS("rds/set1_rds/taxonomy_vsearch99.rds")
+rownames(taxonomy) <- NULL
+#process repseq fasta
+seqs <- readDNAStringSet("data/set1/dna-sequences99.fasta")
+names(seqs) <- ASV_names
+#create tse
+tse_vs99 <- TreeSummarizedExperiment(assays = list(counts = vs99),
+                                     rowData = DataFrame(taxonomy),
+                                     colData = DataFrame(metadata))
+rownames(tse_vs99) <- ASV_names
+#Reference sequences
+referenceSeq(tse_vs99) <- seqs
+#The object
+tse_vs99
 ```
 
-Write vsearch99 files after data wrangling
+Write vsearch99 object
 
-```{r, warning = FALSE, message = FALSE, size = "tiny"}
-#create_directory
-results <- "results_vsearch99/"
-dir.create(results)
+```{r, warning = F, message = F, size = "tiny"}
 #variant_table
-ASV_names <- taxa_names(pseq_vsearch99)
-ASV_counts <- otu_table(pseq_vsearch99)
-ASVdf <- (data.frame(ASV_names,ASV_counts))
-write_tsv(ASVdf, paste0(results,"asvs_set1.tsv"))
+ASVdf <- data.frame(ASV_names, assays(tse_vs99)$counts)
+write_tsv(ASVdf, "set1/asv_vs99.tsv")
 #taxonomy
-ASV_names <- taxa_names(pseq_vsearch99)
-taxonomy <- (data.frame(ASV_names, tax_table(pseq_vsearch99)))
-write_tsv(taxonomy,paste0(results,"taxonomy_set1.tsv"))
+taxonomy <- data.frame(ASV_names, rowData(tse_vs99))
+write_tsv(taxonomy, "set1/taxonomy_vs99.tsv")
 #sequences
-refseq(pseq_vsearch99) %>% writeXStringSet(paste0(results,"repseq_set1.fasta"),
-                                      append = FALSE, compress = FALSE,
+tse_vs99 %>% referenceSeq() %>% writeXStringSet("set1/repseq99.fasta",
+                                      append = F, compress = F,
                                       format = "fasta")
+#read and add tree
+tree <- read.tree("set1/tree_vs99.nwk")
+rowTree(tse_vs99) <- tree
+#save rds
+saveRDS(tse_vs99, "set1/tse_vs99.rds")
 ```
 
 #### Observations
 
-Low bacterial diversity in the samples is most likely explanation why denoising produces good results for long 16S rRNA. Error rate plot looks in this case flawless. However, it is notable that all samples contain over 150 k unique reads.
+The low bacterial diversity in these samples may explain why denoising yields good results for long 16S rRNA sequences. The error rate plot appears flawless for this data. However, it is noteworthy that all samples contain over 150,000 unique reads.
 
-Vsearch produced very high number of variants, over 900 and 9000, respectively.
+In contrast, vsearch clustering generated a significantly higher number of variants, exceeding 900 and 9,000, respectively. Lowest number of variants (37) was observed with emu.
