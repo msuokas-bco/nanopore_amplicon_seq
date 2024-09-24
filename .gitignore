@@ -2,11 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-data/
-rds/
-results_set1/
-results_set2/
-results_vsearch97/
-results_vsearch99/
-results_derep
-Dereplication_set2.qmd
+data
+rds
+set1
+set2
