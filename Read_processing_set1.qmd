@@ -25,33 +25,53 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 
 #### Preprocess reads
 
-Dorado doesn't support demultiplexing of dual indexes on both 5' and 3' ends. Additionally, in ligated libraries reads can be either orientation. Our approach to demultiplex reads is using cutadapt. Index pairs are searched using linked adapters approach in forward and reverse orientation, then scripts are used to reverse complement reverse reads. Finally reads are merged
+Dorado does not support demultiplexing dual indexes located on both the 5' and 3' ends. Additionally, in ligated libraries, the reads can appear in either orientation. To address this, we use `cutadapt` for demultiplexing. Index pairs are identified using the linked adapters approach in both forward and reverse orientations, after which scripts are applied to reverse complement the reverse reads. Finally, the reads are merged.
 
-Please note that autocorrect often change double dashes in command examples.
+**Note:** Be aware that autocorrect might change double dashes in command-line examples.
 
-Extracting forward reads to fastq file can be performed with following command
+#### Extracting Forward Reads
 
-*cutadapt -e 0 -O 12 -g file:\~/scripts/barcodes.fasta --trimmed-only -m 1200 -o "fdemuxed/{name}.fastq.gz reads.fastq.gz*
+You can extract forward reads into a FASTQ file using the following command:
 
-Command will extract barcodes defined in barcodes.fasta file and output matches into individual files in fdemuxed subdirectory. Minimum length is set in example to 1200 bp.
+``` bash
+cutadapt -e 0 -O 12 -g file:~/scripts/barcodes.fasta --trimmed-only \
+-m 1200 -o "fdemuxed/{name}.fastq.gz" reads.fastq.gz
+```
 
-Extracting reverse reads using reverse complemented barcodes.fasta file
+This command extracts barcodes defined in the `barcodes.fasta` file and outputs matching reads into individual files within the `fdemuxed` subdirectory. In this example, the minimum read length is set to 1200 bp.
 
-*cutadapt -e 0 -O 12 -g file:\~/scripts/rev_barcodes.fasta --trimmed-only -m 1200 -o "rdemuxed/{name}.fastq.gz reads.fastq.gz*
+#### Extracting Reverse Reads
 
-Reads are demultiplexed into separate directory
+To extract reverse reads, use the reverse-complemented barcode file:
 
-**Tip!** O, e, m and M parameters can be used to reduce chances of misaligned matches
+``` bash
+cutadapt -e 0 -O 12 -g file:~/scripts/rev_barcodes.fasta --trimmed-only \
+-m 1200 -o "rdemuxed/{name}.fastq.gz" reads.fastq.gz
+```
 
-Next we use bash script that will process each reverse read file and reverse complement them using basic command
+The reads are demultiplexed into a separate directory.
 
-*seqkit seq -rp --seq-type DNA -o reverse_comp.fastq.gz reverse_out.fastq.gz*
+**Tip:** Parameters `-O`, `-e`, `-m`, and `-M` can help reduce the chances of mismatched alignments.
 
-Final step is merge. You can use simple bash script that will merge files with same base name from two separate directories using basic command
+#### Reverse Complementing Reverse Reads
 
-*zcat forward_out.fastq.gz reverse_comp.fastq.gz \>merged_reads.fastq.gz*
+Next, we use a bash script to process each reverse read file and reverse complement them using the following command:
 
-Finally, you can use cutadapt and bash scripts to trim forward and reverse PCR primers from sequence reads.
+``` bash
+seqkit seq -rp --seq-type DNA -o reverse_comp.fastq.gz reverse_out.fastq.gz
+```
+
+#### Merging Forward and Reverse Reads
+
+For the final step, you can merge forward and reverse reads with the same base name from two directories. Here's a simple bash command for that:
+
+``` bash
+zcat forward_out.fastq.gz reverse_comp.fastq.gz > merged_reads.fastq.gz
+```
+
+#### Trimming Primers
+
+Finally, `cutadapt` and bash scripts can be employed to trim forward and reverse PCR primers from the sequence reads.
 
 #### Import set1 to R
 
