@@ -329,7 +329,7 @@ rownames(taxonomy) <- NULL
 #Metadata
 rownames(metadata) <- NULL
 #Create tse
-tse_vs97 <- TreeSummarizedExperiment(assays = list(counts = counts),
+tse_vs97 <- TreeSummarizedExperiment(assays = list(counts = as.matrix(counts)),
                                      rowData = DataFrame(taxonomy),
                                      colData = DataFrame(metadata))
 rownames(tse_vs97) <- ASV_names 
@@ -382,7 +382,7 @@ rownames(taxonomy) <- NULL
 #Metadata
 rownames(metadata) <- NULL
 #Create tse
-tse_vs99 <- TreeSummarizedExperiment(assays = list(counts = counts),
+tse_vs99 <- TreeSummarizedExperiment(assays = list(counts = as.matrix(counts)),
                                      rowData = DataFrame(taxonomy),
                                      colData = DataFrame(metadata))
 rownames(tse_vs99) <- ASV_names 

@@ -18,16 +18,16 @@ knitr::knit_hooks$set(chunk = function(x, options) {
 #### Libraries
 
 ```{r libraries, warning=F, message=F, size = "tiny"}
-library(mia);packageVersion("mia")
-library(vegan);packageVersion("vegan")
-library(scater);packageVersion("scater")
-library(tidyverse);packageVersion("tidyverse")
-library(kableExtra);packageVersion("kableExtra")
-library(patchwork);packageVersion("patchwork")
-library(ggthemes);packageVersion("ggthemes")
+library(mia)
+library(vegan)
+library(scater)
+library(tidyverse)
+library(kableExtra)
+library(patchwork)
+library(ggthemes)
+library(eulerr)
+library(RColorBrewer)
 ```
-
-\newpage
 
 #### Import
 
@@ -39,7 +39,7 @@ tse_vs99 <- readRDS("set2/tse_vs99.rds")
 tse_emu <- readRDS("set2/tse_emu.rds")
 ```
 
-Agglomeration of objects to genus level.
+Agglomerate objects to genus level.
 
 ```{r agglomerate, warning = F, message = F, size = "tiny"}
 #Agglomerate
@@ -71,9 +71,7 @@ tse_emu <- transformAssay(tse_emu, assay.type = "counts",
                                    method = "relabundance")
 ```
 
-\newpage
-
-Getting top10 features
+Get top10 features
 
 ```{r dada, warning = F, message = F, size = "tiny"}
 top10_dada <- getTopFeatures(tse_dada, top = 10, method = "mean",
@@ -99,8 +97,6 @@ kable(vs97_table, digits=2, caption = "Vsearch 97") %>%
   row_spec(0, background = "teal", color = "white")
 ```
 
-\newpage
-
 ```{r vs99, size = "tiny"}
 top10_vs99 <- getTopFeatures(tse_vs99, top = 10, method = "mean",
                               assay.type = "relabundance")
@@ -124,8 +120,6 @@ kable(emu_table, digits=2, caption = "Emu") %>%
   kable_styling(latex_options = c("HOLD_position", "striped"), font_size = 11) %>%
   row_spec(0, background = "teal", color = "white")
 ```
-
-\newpage
 
 For barplot it is necessary to create long table
 
@@ -168,7 +162,40 @@ ab_plot <- ggplot(long_table, aes(x = Sample, y = Abundance, fill = Genus)) +
 ab_plot
 ```
 
-\newpage
+Collect 100 most abundant features into list
+
+```{r top100, warning = F, message =F, size = "tiny"}
+#Reload rds
+tse_dada <- readRDS("set2/tse_dada.rds")
+tse_vs97 <- readRDS("set2/tse_vs97.rds")
+tse_vs99 <- readRDS("set2/tse_vs99.rds")
+#Get top100
+top100_vs99 <- getTopFeatures(tse_vs99, top=100, method="sum",
+                              assay.type="counts", na.rm=TRUE)
+top100_vs97 <- getTopFeatures(tse_vs97, top=100, method="sum",
+                              assay.type="counts", na.rm=TRUE)
+top100_dada <- getTopFeatures(tse_dada, top=100, method="sum",
+                              assay.type="counts", na.rm=TRUE)
+taxa_list <- list(Dada = top100_dada, Vs99 = top100_vs99, Vs97 = top100_vs97)
+```
+
+Plot venn diagram
+
+```{r, warning = F, message = F, size = "tiny"}
+# Example taxonomy lists
+taxa_list <- list(Dada = top100_dada, Vs99 = top100_vs99, Vs97 = top100_vs97)
+# Create the Euler diagram
+fit <- euler(taxa_list)
+# Choose a color palette from RColorBrewer
+my_colors <- brewer.pal(3, "Set3")
+# Plot the enhanced Euler diagram
+plot(fit, 
+     fills = list(fill = my_colors, alpha = 0.7),
+     scaled = TRUE,
+     col = "transparent",
+     quantities = TRUE,
+     )
+```
 
 Alpha diversity measured by Shannon index
 
@@ -193,13 +220,14 @@ tse_emu <- readRDS("set2/tse_emu.rds")
 tse_emu <- transformAssay(tse_emu, assay.type = "counts", method = "relabundance",
                        name = "relabundance")
 tse_emu <- estimateDiversity(tse_emu, assay.type="counts",index="shannon")
-
 #combine results
 alpha <- data.frame(dada = colData(tse_dada)$shannon,
                     vsearch97 = colData(tse_vs97)$shannon,
                     vsearch99 = colData(tse_vs99)$shannon,
                     emu = colData(tse_emu)$shannon)
 ```
+
+\newpage
 
 ```{r shannon_table, message = F, warning = F, size = "tiny"}
 #table
@@ -254,13 +282,13 @@ plot_pcoa <- ggplot(data = combined_pcoa, aes(x=pcoa1, y=pcoa2,
   theme_fivethirtyeight(base_size=8) + scale_color_stata()
 ```
 
+\newpage
+
 Plot pcoa
 
 ```{r pcoa_plot, warning = F, message = F, size = "tiny"}
 plot_pcoa
 ```
-
-\newpage
 
 #### Observations
 
