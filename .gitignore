@@ -3,6 +3,5 @@
 .RData
 .Ruserdata
 data
-rds
+results
 set1
-set2
