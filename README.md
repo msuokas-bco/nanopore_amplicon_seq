@@ -2,9 +2,9 @@
 
 Analysis of full length 16S rRNA amplicons (27F-1492R) sequenced on ONT Minion R10.4.1
 
-Contains analysis of two sets of six samples.
+Set1 contains apparently pure bacterial cultures. Set2 enriched cultures.
 
-Results have been divided in sequence read prosessing and data analysis files.
+First set was analysed with closed-reference-feature-picking method. In second set, multiple approaches were tried and compared.
 
 Treatment of emu result files are in separate file emu_data.qmd
 
