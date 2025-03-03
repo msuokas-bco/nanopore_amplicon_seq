@@ -1,11 +1,10 @@
 ---
-title: "Processing nanopore sequence data"
+title: "Microbiome analysis using nanopore reads"
 author: "Marko Suokas"
 format: pdf
 pdf-engine: lualatex
 editor: visual
 mainfont: Aptos
-monofont: PT Mono
 always_allow_html: yes
 header-includes:
    \usepackage[dvipsnames]{xcolor}
@@ -13,50 +12,61 @@ header-includes:
    \definecolor{ivory}{rgb}{1.0, 1.0, 0.94}
 ---
 
-```{r, include = F}
+```{r options, include = F}
+
 # This allows to use different font sizes inside code chunks
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
   x <- def.chunk.hook(x, options)
-  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
-})
-#Global options
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n",
+                                              x, "\n\n \\normalsize"), x)})
+
+# Global options
 knitr::opts_chunk$set(warning = F, message = F) 
+
+# Load libraries
+library(mia)
+library(dada2)
+library(Biostrings)
+library(ShortRead)
+library(tidyverse)
+library(kableExtra)
+library(ggthemes)
+library(patchwork)
+library(ggsci)
 ```
 
-#### Preprocess reads
+#### Preprocessing reads
 
-Dorado does not support demultiplexing dual indexes located on both the 5' and 3' ends. Additionally, in ligated libraries, the reads can appear in either orientation. To address this, we use `cutadapt` for demultiplexing. Index pairs are identified using the linked adapters approach in both forward and reverse orientations, after which scripts are applied to reverse complement the reverse reads. Finally, the reads are merged.
+Dorado does not support demultiplexing custom dual indexes located on both the 5' and 3' ends. In ligated libraries, these sequences can appear in either orientation. To address this, we use cutadapt for demultiplexing. Index pairs are identified using the linked adapters approach in both forward and reverse orientations. Afterward, a script is applied to reverse complement sequences in the reverse orientation. Finally, the forward and reverse reads are merged for each sample.
 
-**Note:** Be aware that autocorrect might change double dashes in command-line examples.
+#### Extract Forward Reads
 
-#### Extracting Forward Reads
-
-You can extract forward reads into a FASTQ file using the following command:
+Forward reads can be demultiplexed using following command:
 
 ``` bash
 cutadapt -e 0 -O 12 -g file:~/scripts/barcodes.fasta --trimmed-only \
 -m 1200 -o "fdemuxed/{name}.fastq.gz" reads.fastq.gz
 ```
 
-This command extracts barcodes defined in the `barcodes.fasta` file and outputs matching reads into individual files within the `fdemuxed` subdirectory. In this example, the minimum read length is set to 1200 bp.
+This command extracts barcodes defined in the `barcodes.fasta` file and outputs matching reads into individual files within the `fdemuxed` subdirectory. The minimum read length is set to 1200 bp for 16S amplicons.
 
-#### Extracting Reverse Reads
+#### Extract Reverse Reads
 
-To extract reverse reads, use the reverse-complemented barcode file:
+In order to extract reverse reads, the reverse-complemented barcode file is used:
 
 ``` bash
 cutadapt -e 0 -O 12 -g file:~/scripts/rev_barcodes.fasta --trimmed-only \
 -m 1200 -o "rdemuxed/{name}.fastq.gz" reads.fastq.gz
 ```
 
-The reads are demultiplexed into a separate directory.
+The reads are demultiplexed into a rdemuxed directory.
 
 **Tip:** Parameters `-O`, `-e`, `-m`, and `-M` can help reduce the chances of mismatched alignments.
 
-#### Reverse Complementing Reverse Reads
+#### Reverse Complement Reverse Reads
 
-Next, we use a bash script to process each reverse read file and reverse complement them using the following command:
+Next, we use a bash script to process each reverse file and reverse complement them using the following command:
 
 ``` bash
 seqkit seq -rp --seq-type DNA -o reverse_comp.fastq.gz reverse_out.fastq.gz
@@ -64,7 +74,7 @@ seqkit seq -rp --seq-type DNA -o reverse_comp.fastq.gz reverse_out.fastq.gz
 
 #### Merging Forward and Reverse Reads
 
-For the final step, you can merge forward and reverse reads with the same base name from two directories. Here's a simple bash command for that:
+Subsequent step is to merge forward and reverse reads with the same base name from two directories. Here's a simple bash command for that:
 
 ``` bash
 zcat forward_out.fastq.gz reverse_comp.fastq.gz > merged_reads.fastq.gz
@@ -74,133 +84,195 @@ zcat forward_out.fastq.gz reverse_comp.fastq.gz > merged_reads.fastq.gz
 
 Finally, `cutadapt` and bash scripts can be employed to trim forward and reverse PCR primers from the sequence reads.
 
+#### Read quality
+
+Nanopore sequencing Phred scores should be interpreted with caution, as per-base accuracy cannot be directly determined from the electrical signal. Instead, scores are estimates based on the confidence of the basecalling model rather than a direct probability of sequencing error. As a result, traditional quality filtering approaches may not always be appropriate.
+
+ONT instead calculates an estimated cumulative error rate and converts it into an average quality score per read. The following code computes this metric and generates a violin plot showing the distribution of average sequence quality per read for each sample.
+
+```{r nanopore_quality, eval = F, size="small"}
+# Define path
+source_dir <- "data/reads/set1"
+# A function to calculate so called AvgQual
+extract_nano_qscores <- function(file) {
+    # Read fastq
+    fq <- readFastq(file)
+    # Extract q-values to a matrix
+    qmat <- as(quality(fq), "matrix")
+    # Convert values to error probabilities
+    error_probs <- 10^(-qmat/10)
+    # Compute number of expected errors per read
+    total_errors <- rowSums(error_probs, na.rm = T)
+    # Length per read
+    read_lenghts <- rowSums(!is.na(qmat))
+    # Compute "ONT-style" Q-score
+    ont_qscores <- -10*log10(total_errors/read_lenghts)
+    # Trim file names
+    sampleid <- sub("\\.fastq\\.gz$", "", basename(file))
+    
+    # Create a dataframe
+    qdata <- tibble(
+        nanopore_qscore = ont_qscores,
+        sampleid = sampleid)
+    return(qdata)
+}
+
+# Create list of files
+files <- list.files(source_dir, pattern = "\\.fastq\\.gz$",
+                    full.names = T)
+# Apply function and use map_dfr to combine dataframes together
+qscore_data <- map_dfr(files, extract_nano_qscores)
+# Save result to a rds file
+saveRDS(qscore_data, "set1/nanopore_quality.rds")
+```
+
+Violin plot
+
+```{r ont_quality_plot, size = "small"}
+# Read data
+qdata <- readRDS("set1/nanopore_quality.rds")
+
+# Divide samples to groups of 12
+sample_list <- unique(qdata$sampleid)
+sample_groups <- split(sample_list, ceiling(seq_along(sample_list) / 12))
+
+# Generate a separate plot for each group
+plots <- map(sample_groups, function(group_samples) {
+  ggplot(filter(qdata, sampleid %in% group_samples),
+         aes(x = sampleid, y = nanopore_qscore, fill = sampleid)) +
+    geom_violin(scale = "width", alpha = 0.6) +
+    theme_fivethirtyeight(base_size=8) +
+    labs(x = "Sample", y = "Nanopore Q-score") +
+    theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+})
+
+# Combine all plots into a single vertical layout
+final_plot <- wrap_plots(plots, ncol = 1)
+
+# Show the plot
+print(final_plot)
+
+```
+
 #### Import sequence data to Qiime 2
 
-```{bash, eval = F}
-#Activate qiime environment
-source /opt/miniconda3/etc/profile.d/conda.sh
-conda activate qiime2-2024.2
-# QIIME 2 command to import sequence data
+QIIME2 import requires manifest.csv that defines names and paths of sequence files.
+
+```{bash, eval = F, size = "small"}
+
+# Activate qiime environment
+export PATH="/homedir04/msuokas/miniconda3/bin:$PATH"
+source activate qiime-2024.10
+
+# Import sequence data
 qiime tools import \
   --type 'SampleData[SequencesWithQuality]' \
-  --input-path data/processed/set1/manifest.tsv \
-  --output-path data/work/set1/demux.qza \
+  --input-path data/reads/set1/manifest.csv \
+  --output-path data/set1/demux.qza \
   --input-format SingleEndFastqManifestPhred33
 ```
 
 #### Dereplicate sequences
 
-```{bash, eval = F}
-source /opt/miniconda3/etc/profile.d/conda.sh
-conda activate qiime2-2024.2
+Dereplication will remove sequence redundancy
+
+```{bash, eval = F, size = "small"}
+
+# Activate qiime environment
+export PATH="/homedir04/msuokas/miniconda3/bin:$PATH"
+source activate qiime-2024.10
+
 # Dereplicate sequences with vsearch plugin
 qiime vsearch dereplicate-sequences \
     --p-min-seq-length 1200 \
-    --o-dereplicated-table data/work/dereplicated_table.qza \
-    --o-dereplicated-sequences data/work/set1/derep_sequences.qza \
-    --i-sequences data/work/demux.qza
+    --o-dereplicated-table data/set1/derep_table.qza \
+    --o-dereplicated-sequences data/set1/derep_sequences.qza \
+    --i-sequences data/set1/demux.qza
 ```
 
-#### Pick otus using closed Silva reference
+#### Pick otus using closed-otu-picking from Silva reference
 
-Step performed at CSC.
+For low diversity samples closed-otu-picking seems good approach.
 
-```{bash, eval = F}
-#!/bin/bash
-#SBATCH --job-name=cluster
-#SBATCH --account=project_2010620
-#SBATCH --time=48:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
-#SBATCH --mem=48G
-#SBATCH --partition=small
-#SBATCH --gres=nvme:100
+```{bash, eval = F, size = "small"}
 
-#set up qiime
-module load qiime2/2024.2-amplicon
+# Activate qiime environment
+export PATH="/homedir04/msuokas/miniconda3/bin:$PATH"
+source activate qiime-2024.10
 
-# run task. Don't use srun in submission as it resets TMPDIR
+# Closed reference otu clustering  command
 qiime vsearch cluster-features-closed-reference \
-   --i-sequences derep_sequences.qza \
-   --i-table derep_table.qza \
-   --i-reference-sequences ../silva-138-99-seqs.qza \
-   --p-strand plus --p-threads 32 --p-perc-identity 0.97 \
-   --output-dir  results
+   --i-sequences data/set1/derep_sequences.qza \
+   --i-table data/set1/derep_table.qza \
+   --i-reference-sequences ~/reference/silva-138-99-seqs.qza \
+   --p-strand plus --p-threads 10 --p-perc-identity 0.97 \
+   --o-clustered-table data/set1/clustered_table \
+   --o-clustered-sequences data/set1/clustered_seq.qza \
+   --o-unmatched-sequences data/set1/unmatched.qza
 ```
 
-#### Detect chimeric otus
+#### Remove rare features
 
-Step performed at CSC
+Our sampling is higher than typically and chosen minimum frequency was selected accordingly.
 
-```{bash, eval = F}
-#!/bin/bash
-#SBATCH --job-name=chimera_detection
-#SBATCH --account=project_2010620
-#SBATCH --time=24:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=24G
-#SBATCH --partition=small
-#SBATCH --gres=nvme:100
+```{bash, eval = F, size = "small"}
 
-#set up qiime
-module load qiime2/2024.2-amplicon
+# Activate qiime environment
+export PATH="/homedir04/msuokas/miniconda3/bin:$PATH"
+source activate qiime-2024.10
 
-# run task. Don't use srun in submission as it resets TMPDIR
-qiime vsearch uchime-denovo --i-sequences clustered_sequences.qza \
---i-table clustered_table.qza  \
---output-dir chimeric
+# QIIME 2 command to filter rare features
+qiime feature-table filter-features \
+--i-table data/set1/clustered_table.qza \
+--p-min-frequency 10 \
+--o-filtered-table data/set1/n10_table.qza
 
-```
-
-#### Filter chimeras from table file
-
-```{bash, eval = F}
-#Activate qiime environment
-source /opt/miniconda3/etc/profile.d/conda.sh
-conda activate qiime2-2024.2
-# QIIME 2 command to keep nonchimeric features
- qiime feature-table filter-features \
-    --i-table data/work/set1/clustered_table.qza \
-    --m-metadata-file data/work/set1/nonchimeras.qza \
-    --p-min-frequency 2 \
-    --o-filtered-table data/work/set1/otu_table.qza
-```
-
-#### Filter chimeras from sequence file
-
-```{bash, eval = F}
-#Activate qiime environment
-source /opt/miniconda3/etc/profile.d/conda.sh
-conda activate qiime2-2024.2
-# QIIME 2 command to keep nonchimeric sequences
+# QIIME 2 command to filter sequence file
 qiime feature-table filter-seqs \
-   --i-data data/work/set1/clustered_sequences.qza \
-   --i-table data/work/set1/otu_table.qza \
-   --o-filtered-data data/work/set1/otu_sequences.qza
+   --i-data data/set1/clustered_seq.qza \
+   --i-table data/set1/n10_table.qza \
+   --o-filtered-data data/set1/n10_seq.qza
+
 ```
 
-#### Libraries
+#### Detect and filter chimeric features
 
-```{r libraries, size = "tiny"}
-library(mia)
-library(Biostrings)
-library(ShortRead)
-library(tidyverse)
-library(kableExtra)
-library(ggthemes)
+Detecting chimeric features after removal of rare features will save computing resources.
+
+```{bash, eval = F, size = "small"}
+# Activate qiime environment
+export PATH="/homedir04/msuokas/miniconda3/bin:$PATH"
+source activate qiime-2024.10
+
+# Detect chimeras
+qiime vsearch uchime-denovo \
+--i-sequences data/set1/n10_seq.qza \
+--i-table data/set1/n10_table.qza \
+--o-chimeras data/set1/chimeras.qza \
+--o-stats data/set1/uchime-stats.qza \
+--o-nonchimeras data/set1/nonchimeras.qza
+
+# Keep nonchimeric features in the table
+qiime feature-table filter-features \
+--i-table data/set1/n10_table.qza \
+--m-metadata-file data/set1/nonchimeras.qza \
+--o-filtered-table data/set1/otu_table.qza
+
+# Keep nonchimeric sequences
+qiime feature-table filter-seqs \
+   --i-data data/set1/n10_seq.qza \
+   --i-table data/set1/otu_table.qza \
+   --o-filtered-data data/set1/otu_seq.qza
 ```
 
-\newpage
+#### Import qiime files and metadata
 
-Import qiime files and metadata
+We will import feature table along with representative sequences and metadata to a TSE object.
 
-```{r import, size = "tiny"}
+```{r import, size = "small"}
 #sequence file
-tse <- importQIIME2(featureTableFile = "data/work/set1/otu_table.qza",
-                    refSeqFile = "data/work/set1/otu_sequences.qza")
+tse <- importQIIME2(featureTableFile = "data/set1/otu_table.qza",
+                    refSeqFile = "data/set1/otu_seq.qza")
 tse <- tse[, sort(colnames(tse))]
 #add metadata
 metadata <- data.frame(read_tsv("data/set1_meta.tsv",
@@ -210,17 +282,13 @@ colData(tse) <- DataFrame(metadata)
 tse
 ```
 
-```{r}
-library(dada2)
-seqs <- referenceSeq(tse)
-tid <- assignTaxonomy(seqs, refFasta="~/feature_classifiers/silva_nr99_v138.1_train_set.fa.gz", minBoot = 95, multithread = 2, verbose = T)
-```
-
 #### Create taxonomy table from Silva
 
-```{r taxonomy, size = "tiny"}
-#
-silva_tax <- read_tsv("~/feature_classifiers/silva_taxonomy.tsv",
+As we have used Silva to our otu picking, we can fetch taxonomic information using Silva sequnence identifiers.
+
+```{r taxonomy_table, size = "small"}
+# Routine to separate taxonomic ranks
+silva_tax <- read_tsv("~/reference/silva_taxonomy.tsv",
                       show_col_types = F)
 rows <- data.frame(FeatureID = rownames(tse))
 taxonomy <- dplyr::left_join(rows, silva_tax, by = "FeatureID")
@@ -234,59 +302,63 @@ taxonomy <- taxonomy %>%
 taxonomy <- column_to_rownames(taxonomy, "FeatureID")
 ```
 
-```{r}
+Species-level information is filtered to remove ambiguous matches.
+
+```{r prune_taxa, size="small"}
 taxonomy <- taxonomy %>%
-  mutate(Species = if_else(str_detect(Species, "unknown|uncultured|metagenome"), NA_character_, Species))
+  mutate(Species = if_else(str_detect(Species, "unknown|uncultured|metagenome"),
+                           NA_character_, Species))
 ```
 
 Add taxonomy to rowData
 
-```{r, size = "tiny"}
-#Add taxonomy
+```{r to_tse, size = "small"}
+# Add taxonomy
 rownames(taxonomy) <- NULL
 rowData(tse) <- DataFrame(taxonomy)
-#Rename rows (alternative to Silva ID)
-#rownames(tse) <- paste0("OTU_", seq_len(nrow(tse)))
+# Check object
 tse
 ```
 
-#### Write object data to files
+#### Write data to files
 
-Write RDS. It can be reloaded as unchanged object to R
+Write RDS. It can be reloaded to R
 
-```{r rds, size = "tiny"}
+```{r rds, size = "small"}
 saveRDS(tse, "set1/tse.rds")
 ```
 
-Write abundance table
+Write abundance table.
 
-```{r otus, size = "tiny"}
+```{r otus, size = "small"}
 #FeatureID will be rowname
 abd <- data.frame(FeatureID = rownames(tse),assays(tse)$counts)
 #Write
 write_tsv(abd, "set1/otu_table.tsv")
 ```
 
-Write taxonomy table
+Write taxonomy table.
 
-```{r taxa, size = "tiny"}
+```{r taxa, size = "small"}
 #FeatureID will be rowname
 taxt <- data.frame(FeatureID = rownames(tse), rowData(tse))
 #Write
 write_tsv(taxt, "set1/taxonomy.tsv")
 ```
 
-Variant sequences to fasta file
+Write sequences to fasta file.
 
-```{r write_seq, size = "tiny"}
+```{r write_seq, size = "small"}
 writeXStringSet(referenceSeq(tse), "set1/repseq.fasta",
                                       append = F, compress = F,
                                       format = "fasta")
 ```
 
-Write metadata file
+\newpage
 
-```{r write_meta, size = "tiny"}
+Write metadata file.
+
+```{r write_meta, size = "small"}
 metadf <- data.frame(colData(tse)) %>% rownames_to_column(var="Sampleid")
 #write
 write_tsv(metadf, "set1/metadata.tsv")
@@ -294,20 +366,21 @@ write_tsv(metadf, "set1/metadata.tsv")
 
 #### Microbe data analysis
 
-Agglomerate taxonomy to genus rank and count relative abundance
+Agglomerate taxonomy to genus-level and count relative abundance
 
-```{r prepare, size = "tiny"}
+```{r prepare, size = "small"}
+# Agglomerate
 tse <- agglomerateByRank(tse, rank = "Genus",
                              onRankOnly = T, na.rm = F)
-#relabundance
+# Relabundance
 tse <- transformAssay(tse, assay.type = "counts", method = "relabundance")
 ```
 
-Pick ten most abundant features
+Pick most abundant features
 
-```{r topten, size = "tiny"}
-#top10 features
-top10 <- getTopFeatures(tse, top = 10, method = "mean",
+```{r topten, size = "small"}
+#top features
+top10 <- getTop(tse, top = 7, method = "mean",
                         assay.type = "relabundance")
 #create and filter table
 table <- data.frame(assays(tse)$relabundance)
@@ -315,41 +388,43 @@ table <- table %>% rownames_to_column(var = "Genus") %>%
   filter(Genus %in% top10)
 ```
 
-\newpage
+Composition table
 
-Abundance table
-
-```{r abundance_table, size = "tiny"}
-kable(table, digits=3) %>% 
+```{r abundance_table, size = "small"}
+kable(table, digits=5) %>% 
   kable_styling(latex_options = c("HOLD_position", "striped"),
-                font_size = 10) %>%
+                font_size = 8) %>%
   row_spec(0, background = "teal", color = "white")
 ```
 
+\newpage
+
 #### Composition plot
 
-Change data to long table format
+Convert data first to long table format and then plot.
 
-```{r barplot, size = "tiny", fig.dim = c(6,3)}
+```{r barplot, size = "small", fig.dim = c(6,3)}
+# Long dataframe
 df_long <- table %>% pivot_longer(cols = starts_with("barcode"),
 names_to = "Sample", values_to = "Abundance")
-#Plot stacked barplot
+
+# Plot stacked barplot
 ggplot(df_long, aes(x = Sample, y = Abundance, fill = Genus)) +
-geom_bar(stat = "identity") + theme_fivethirtyeight(base_size = 8) + scale_fill_tableau() + theme(axis.text.x =
+geom_bar(stat = "identity") + theme_fivethirtyeight(base_size = 8) + scale_fill_lancet() + theme(axis.text.x =
 element_text(angle = 90))
 ```
 
 #### Summary of closed reference otu picking strategy
 
-Count first number of sequences in the raw sequence files
+Count first number of sequences in raw files.
 
-```{r raw_sequences, size = "tiny"}
+```{r raw_sequences, size = "small"}
+
 # List all compressed fastq files in the folder
-fastq_files <- list.files("data/processed/set1", pattern = "\\.fastq\\.gz$", full.names = T)
+fastq_files <- list.files("data/reads/set1", pattern = "\\.fastq\\.gz$", full.names = T)
 
 # Function to count sequences in a compressed FASTQ file
 count_sequences_in_fastq <- function(file) {
-  # Use gzfile to read the compressed file
   fq <- readFastq(file)
   return(length(fq))
 }
@@ -361,7 +436,7 @@ raw_data <- data.frame(File = fastq_files, Sequences = sequence_counts)
 
 Create summary table
 
-```{r comparison, size = "tiny"}
+```{r comparison, size = "small"}
 summary <- data.frame(Sample = colnames(tse), Raw_Counts = raw_data$Sequences, Counts = colSums(assays(tse)$counts))
 summary <- summary %>% mutate(Percentage = Counts/Raw_Counts)
 rownames(summary) <- NULL
@@ -373,6 +448,8 @@ kable(summary, digits=2) %>%
 
 #### Results
 
-Due to nature of nanopore reads, closed reference otu picking was performed against Silva 138.1 database at 97 % identity level. Results in the samples remain unchanged compared to earlier. However, methologically earlier results are based on wrong assumptions.
+Results show that using SUP basecalling with additional quality filtering produce sequence accuracy that is enough for OTU picking stategies via sequence clustering. Most of nanopore studies use mapping strategies that might not always recognize all biological features.
 
-Otu picking percentage was high across all samples. This can be interpreted as there is no problem in sequence quality per se. Problem is that nanopore is unable to predict quality at single nucleotide level in which most modern analysis methods are based on.
+The samples were purified cultures, and a closed-reference OTU-picking strategy was chosen accordingly. Our results confirm that all samples were effectively pure cultures. In fact, exceptionally low noise level at genus level results suggest that predicted 0.5-1 bp errors / 100 bp sequence is realistic.
+
+Additionally, proportion of matched sequences against database was high across all samples suggesting that strategy is a viable option when analysing microbial communities with nanopore sequencer.
